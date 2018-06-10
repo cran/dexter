@@ -138,11 +138,11 @@ start_new_project_from_oplm = function(dbname, scr_path, dat_path,
       
       rsp = rsplit(substring(lines, 
                         responses_start, 
-                        responses_start + scr$nitBook[bkl] * response_length - 1))
+                        responses_start + scr$nitBook[bkl] * response_length-1))
       
-      if(any(nchar(rsp) < (scr$nitBook[bkl] * response_length + responses_start - 1)))
+      if(any(sapply(rsp,length) < scr$nitBook[bkl]))
       {
-        lnbr = min(which(nchar(rsp) < (scr$nitBook[bkl] * response_length + responses_start - 1))) 
+        lnbr = min(which(sapply(rsp,length) < scr$nitBook[bkl])) 
         stop(paste0('Error on line ', (lnbr + vp - 1), 
                     '. Line is too short for the number of responses in booklet "',bkl[lnbr],
                     '" with response_length = ',response_length,' and number of items = ',

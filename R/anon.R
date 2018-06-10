@@ -19,13 +19,13 @@
 # }
 
 # Wrapper for C function that generates plausible values using a straightforward rejection algorithm
-#
-# @param b      vector of beta's per item_score, including 0 category, ordered by item_id, item_score
-# @param a      vector of discriminations per item_score, inclusing 0 category, ordered by item_id, item_score
-# @param score  vector of sum scores
-# @param        npv, nbr of plausible values per sum score
-# @pop          vector of indices of population for each sum score
-# @mu, sigma    prior mu and sigma for each population
+# Normal prior(s)
+# @param b          vector of beta's per item_score, including 0 category, ordered by item_id, item_score
+# @param a          vector of discriminations per item_score, inclusing 0 category, ordered by item_id, item_score
+# @param score      vector of sum scores
+# @param npv        nbr of plausible values per sum score
+# @param pop        vector of indices of population for each sum score
+# @param mu, sigma  prior mu and sigma for each population
 # @return
 # matrix with in each row npv plausible values for each sum score
 pv_ <- function(b,a,first,last,score,npv,mu,sigma,pop)
@@ -41,9 +41,39 @@ pv_ <- function(b,a,first,last,score,npv,mu,sigma,pop)
          as.integer(pop-1),
          as.integer(length(score)),
          as.integer(length(first)),
-         as.integer(length(pop)),
          as.integer(npv),
-         as.double(rep(0*score,npv)))[[13]]
+         as.double(rep(0*score,npv)))[[12]]
+  tmp=as.vector(tmp)
+  if (npv>1) dim(tmp)=c(length(score),npv)
+  return(tmp)
+}
+
+# Wrapper for C function that generates plausible values using a straightforward rejection algorithm
+# Mixture of two normals as flexible prior
+# @param b          vector of beta's per item_score, including 0 category, ordered by item_id, item_score
+# @param a          vector of discriminations per item_score, inclusing 0 category, ordered by item_id, item_score
+# @param score      vector of sum scores
+# @param npv        nbr of plausible values per sum score
+# @param p          prior group membership probabilities
+# @param mu, sigma  mu and sigma for each population
+# @param pop        vector of indices of population for each sum score. Currently not used
+# @return
+# matrix with in each row npv plausible values for each sum score
+pv_mix <- function(b,a,first,last,score,npv,p,mu,sigma, pop)
+{
+  tmp=.C("PVMix",
+         as.double(b),
+         as.integer(a),
+         as.integer(first-1),
+         as.integer(last-1),
+         as.double(p),
+         as.double(mu),
+         as.double(sigma),
+         as.integer(score),
+         as.integer(length(score)),
+         as.integer(length(first)),
+         as.integer(npv),
+         as.double(rep(0*score,npv)))[[12]]
   tmp=as.vector(tmp)
   if (npv>1) dim(tmp)=c(length(score),npv)
   return(tmp)
@@ -124,6 +154,8 @@ recycle_pv = function(b, a, first, last, npv=1, mu=0, sigma=2, prior_sample=NULL
   return(tmp)
 }
 
+####################### FUNCTIONS TO UPDATE PRIOR of PLAUSIBLE VALUES
+
 # Given samples of plausible values from one or more normal distributions
 # this function samples means and variances of plausible values from their posterior
 # It updates the prior used in sampling plausible values
@@ -134,70 +166,150 @@ recycle_pv = function(b, a, first, last, npv=1, mu=0, sigma=2, prior_sample=NULL
 # @param sigma  current standard deviation of each population
 #
 # @return       a sample of mu and sigma
+
+#TO DO: Adapt when there are multiple groups. Use hyperprior to keep means together
 update_pv_prior<-function(pv, pop, mu, sigma)
 {
-  min_n=5 # no need to update when groups are very small
+  min_n=5 # no need to update variance when groups are very small
   for (j in 1:length(unique(pop)))
   {
     pv_group=subset(pv,pop==j)
     m=length(pv_group)
-    pv_mean=mean(pv_group)
     if (m>min_n)
     {
       pv_var=var(pv_group)         
       sigma[j] = sqrt(1/rgamma(1,shape=(m-1)/2,rate=((m-1)/2)*pv_var))
     }
-    mu[j] = rnorm(1,pv_mean,sigma[j]/sqrt(m))
+    pv_mean=mean(pv_group)
+    mu[j] = rnorm(1,pv_mean,sigma[j]/sqrt(m)) 
   }
   return(list(mu=mu, sigma=sigma))
 }
+
+
+# Given samples of plausible values from a mixture of two normal distributions
+# this function samples means and variances of plausible values from their posterior
+# It updates the prior used in sampling plausible values. 
+#
+# Loosely based on Chapter 6 of 
+# Marin, J-M and Robert, Ch, P. (2014). Bayesian essentials with R. 2nd Edition. Springer: New-York
+# but works surpringly better than the official implementation in bayess
+#
+# @param pv     vector of plausible values
+# @param p  vector of group membership probabilities
+# @param mu     current means of each group
+# @param sigma  current standard deviation of each group
+# @param pop    vector of population indexes. Currently not used
+#
+# @return       a sample of p, mu and sigma
+update_pv_prior_mixnorm = function (pv, p, mu, sigma, pop) {
+  n = length(pv)
+  z = rep(0, n)
+  nj = c(0,0); 
+  l = rep(1,2)
+  v = rep(5,2)
+  # Burnin and nr of Iterations with 0<Bin<nIter
+  Bin = 1 
+  nIter = 2
+
+  mug = sig = pgr = matrix(0,nIter,2)
+  mug[1,] = mu
+  sig[1,] = sigma
+  pgr[1,] = p
+  mean_pv = mean(pv)
+  var_pv = var(pv)
+  for (i in 1:nIter)
+  {
+      ## latent group membership
+    for (t in 1:n)
+    {
+      prob = pgr[i,]*dnorm(pv[t], mean = mug[i,], sd = sig[i,])
+      if (sum(prob)==0) prob=c(0.5,0.5)
+      z[t] = sample(1:2, size = 1, prob=prob)
+    }
+      ## Means
+    for (j in 1:2)
+    {
+      nj[j]  = sum(z==j) 
+      mug[i,j]  = rnorm(1, mean = (l[j]*mug[i,j]+nj[j]*mean(pv[z==j]))/(l[j]+nj[j]), 
+                             sd = sqrt(sig[i,j]^2/(nj[j]+l[j])))
+    }
+      ## Vars 4=var_pv
+    for (j in 1:2) 
+    {
+      if (nj[j]>1)
+      {
+        var_pvj = var(pv[z==j])
+        sig[i,j] = sqrt(1/rgamma(1, shape = 0.5*(v[j]+nj[j]) ,
+                                     rate = 0.5*(var_pv + nj[j]*var_pvj + 
+                                           (l[j]*nj[j]/(l[j]+nj[j]))*(mean_pv - mean(pv[z==j]))^2)))
+      }
+    }
+      ## membership probabilities
+    p = rgamma(2, shape = nj + 1, scale = 1)
+    pgr[i,] = p/sum(p)
+  }
+  return(list(p = colMeans(pgr[Bin:nIter,]), mu = colMeans(mug[Bin:nIter,]), sigma = colMeans(sig[Bin:nIter,]), grp = z))
+}
+
+
 
 # @param x                tibble(booklet_id <char or int>, person_id <char>, sumScore <int>, pop <int>)
 # @param design           list: names: as.character(booklet_id), values: tibble(first <int>, last <int>) ordered by first
 # @param b                vector of b's per item_score, including 0 category, ordered by item_id, item_score
 # @param a                vector of weights per item_score, inclusing 0 category, ordered by item_id, item_score
 # @param nPV              number of plausible values to return per person
-# @param n_prior_updates  number of samples from full-conditional of prior parameters 
 ### If the parameters are estimated with calibrate_Bayes:
 # @param from             burn-in: first sample of b that is used
 # @param by               every by-th sample of b is used. If by>1 auto-correlation is avoided.
+# @param prior.dist       Prior distribution
 #
 # @return
 # tibble(booklet_id <char or int>, person_id <char>, sumScore <int>, nPV nameless columns with plausible values)
-pv = function(x, design, b, a, nPV, n_prior_updates = 10, from = 20, by = 5)
+pv = function(x, design, b, a, nPV, from = 20, by = 5, prior.dist = c("normal", "mixture"))
 {
-  start_prior=c(0,4)
+  prior.dist = match.arg(prior.dist)
+  prior.dist = "mixture"
   nPop = length(unique(x$pop))
-  priors = list(mu=rep(start_prior[1],nPop),sigma=rep(start_prior[2],nPop))
-
+  n_prior_updates = 10
+  if (prior.dist == "mixture") priors = list(p=c(0.6,0.4), mu=c(0,0.1), sigma=c(2,2), grp=sample(1:2, length(x$pop), replace=T, prob=c(0.5,0.5)))
+  if (prior.dist == "normal")  priors = list(mu=rep(0,nPop), sigma=rep(4,nPop))
+  
   if (is.matrix(b))
   {
-    add_pv = function(booklet_id, pop, sumScore, iter, priors, design, a, b)
-    {
-      bkID = as.character(booklet_id[1])
-      pv_(b[iter,], a, design[[bkID]]$first, design[[bkID]]$last, sumScore, 1, priors$mu, priors$sigma, pop)
-    }
-
-    apv=1
     which.pv = seq(from,(from-by)*(from>by)+by*nPV,by=by)
     nIter=max(which.pv)
+    if (nrow(b)<nIter) stop(paste("at least", as.character(nIter), "samples of item parameters needed in function pv"))
     out_pv=matrix(0,length(x$sumScore),nPV)
-    if (nrow(b)<nIter) stop(paste("at least", as.character(nIter), "samples of item parametes needed in function pv"))
-                            
+ 
+    add_pv = function(booklet_id, pop, sumScore, iter, priors, design, a, b, prior.dist)
+    {
+      bkID = as.character(booklet_id[1])
+      if (prior.dist == "mixture") out = pv_(b[iter,], a, design[[bkID]]$first, design[[bkID]]$last, sumScore, 1, priors$mu, priors$sigma, priors$grp)
+      if (prior.dist == "normal")  out = pv_(b[iter,], a, design[[bkID]]$first, design[[bkID]]$last, sumScore, 1, priors$mu, priors$sigma, pop)
+      return(out)
+    }
+    
+    apv=1
+    pb = txtProgressBar(min=0, max=nIter)
     for(iter in 1:nIter)
     {
       x = x %>% 
         group_by(.data$booklet_id) %>%
-        mutate(PVX = add_pv(.data$booklet_id, .data$pop, .data$sumScore, iter, priors, design, a, b)) %>%
+        mutate(PVX = add_pv(.data$booklet_id, .data$pop, .data$sumScore, iter, priors, design, a, b, prior.dist)) %>%
         ungroup()
-       
-      priors = update_pv_prior(x$PVX, x$pop, priors$mu, priors$sigma)
+      
+      if (prior.dist == "mixture") priors = update_pv_prior_mixnorm(x$PVX, priors$p, priors$mu, priors$sigma)
+      if (prior.dist == "normal")  priors = update_pv_prior(x$PVX, x$pop, priors$mu, priors$sigma)
+      
       if (iter == which.pv[apv])
       {
         colnames(x)[colnames(x)=='PVX'] = paste0('PV', iter)
         apv=apv+1
       }
+      setTxtProgressBar(pb, value=iter)
     }
+    close(pb)
     x %>% 
       select(.data$booklet_id, .data$person_id,.data$sumScore, matches('PV\\d+'))
     
@@ -205,16 +317,16 @@ pv = function(x, design, b, a, nPV, n_prior_updates = 10, from = 20, by = 5)
   {
    for(iter in 1:n_prior_updates) 
    {
-      pv = x %>% 
+      pv = x %>%
         group_by(.data$booklet_id) %>%
         do({
          bkID = as.character(.$booklet_id[1])
          tibble(pop=.$pop, pv = pv_(b, a, design[[bkID]]$first, design[[bkID]]$last, .$sumScore, 1, priors$mu, priors$sigma, .$pop))
        }) %>%
-       ungroup() 
+       ungroup()
       priors = update_pv_prior(pv$pv,pv$pop,priors$mu,priors$sigma)
-    }  
-    x %>% 
+   }
+   x %>% 
       group_by(.data$booklet_id) %>%
       do({
         bkID = as.character(.$booklet_id[1])

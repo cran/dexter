@@ -15,7 +15,8 @@ extern void H0(void *, void *, void *, void *, void *, void *, void *, void *, v
 extern void ittot_mat(void *, void *, void *, void *, void *, void *, void *, void *);
 extern void ittot_mat0(void *, void *, void *, void *, void *, void *, void *, void *);
 extern void meanElSym(void *, void *, void *, void *, void *, void *, void *, void *, void *, void *);
-extern void PV(void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *);
+extern void PV(void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *);
+extern void PVMix(void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *, void *);
 extern void sampleNRM(void *, void *, void *, void *, void *, void *, void *, void *);
 extern void sampleNRM2(void *, void *, void *, void *, void *, void *, void *, void *);
 extern void recyclePV(void *, void *, void *, void *, void *, void *, void *, void *, void *);
@@ -33,7 +34,8 @@ static const R_CMethodDef CEntries[] = {
   {"ittot_mat",  (DL_FUNC) &ittot_mat,   8},
   {"ittot_mat0", (DL_FUNC) &ittot_mat0,  8},
   {"meanElSym",  (DL_FUNC) &meanElSym,  10},
-  {"PV",         (DL_FUNC) &PV,         13},
+  {"PV",         (DL_FUNC) &PV,         12},
+  {"PVMix",      (DL_FUNC) &PVMix,      12},  
   {"recyclePV",  (DL_FUNC) &recyclePV,   9},
   {"recyclePV2", (DL_FUNC) &recyclePV2,  9},    
   {"recyclePVaA",(DL_FUNC) &recyclePVaA,10},      

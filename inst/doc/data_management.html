@@ -12,7 +12,7 @@
 
 <meta name="author" content="Jesse Koops" />
 
-<meta name="date" content="2018-05-17" />
+<meta name="date" content="2018-06-08" />
 
 <title>Data management in dexter</title>
 
@@ -70,7 +70,7 @@ code > span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Inf
 
 <h1 class="title toc-ignore">Data management in dexter</h1>
 <h4 class="author"><em>Jesse Koops</em></h4>
-<h4 class="date"><em>2018-05-17</em></h4>
+<h4 class="date"><em>2018-06-08</em></h4>
 
 
 
@@ -88,7 +88,7 @@ db =<span class="st"> </span><span class="kw">start_new_project</span>(verbAggrR
 <p>The new project is actually a SQLite data base, which is created, initialized, and saved to the file, “verbAggression.db”. In this example, we add Gender as a person covariate with a default value of <code>&quot;&lt;unknown&gt;&quot;</code>.</p>
 <p>The data set, <code>verbAggrData</code>, contains only one booklet, which we add to the project with:</p>
 <div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r"><span class="kw">add_booklet</span>(db, <span class="dt">x=</span>verbAggrData, <span class="dt">booklet_id=</span><span class="st">&quot;agg&quot;</span>)</code></pre></div>
-<pre><code>## no column `person_id` provided, automatically generating unqique person id's</code></pre>
+<pre><code>## no column `person_id` provided, automatically generating unique person id's</code></pre>
 <pre><code>## $items
 ##  [1] &quot;S1DoCurse&quot;   &quot;S1DoScold&quot;   &quot;S1DoShout&quot;   &quot;S1WantCurse&quot; &quot;S1WantScold&quot;
 ##  [6] &quot;S1WantShout&quot; &quot;S2DoCurse&quot;   &quot;S2DoScold&quot;   &quot;S2DoShout&quot;   &quot;S2WantCurse&quot;

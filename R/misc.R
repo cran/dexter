@@ -299,18 +299,7 @@ NULL
 #' @keywords datasets
 NULL
 
-###########################################
-#' Item properties in the PISA 2012 example
-#' 
-#' A data set of item properties in the PISA 2012 example (see the
-#' help screen for function add_booklet)
-#' 
-#' 
-#' @name PISA_item_class
-#' @docType data
-#' @format A data set with 109 rows and 6 columns.
-#' @keywords datasets
-NULL
+
 
 
 

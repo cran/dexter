@@ -12,7 +12,8 @@ add_test3DC(db3dc, parms, design, test_id, standards, mu, sigma,
 
 \item{parms}{a parameters object produced by fit_enorm}
 
-\item{design}{a data.frame with columns item_id and cluster and optionally cluster_nbr and item_nbr. See details.}
+\item{design}{a data.frame with columns item_id, cluster and optionally cluster_nbr (used for sorting the clusters) 
+and item_nbr (used for sorting items within cluster).}
 
 \item{test_id}{name/id of the test as it will be shown in the 3DC application.}
 
@@ -28,9 +29,9 @@ application. If NULL, the distribution will be derived from a simulation.}
 \item{group_leader}{Login name of the group leader, default is admin. The default password is always
 admin, but can be changed in the 3DC application.}
 
-\item{omit}{the tail probability of the testscores to be omitted. For example, if set to 0.1, 
+\item{omit}{the tail probability of the testscores to be omitted from the 3DC form. For example, if set to 0.1, 
 the 10% highest and the 10% lowest scores will be omitted thus restricting the range on which standards can be set.
-Default is 0.0 (omit nothing)}
+The Default is 0.0 (omit nothing)}
 }
 \description{
 See create3DC for more information

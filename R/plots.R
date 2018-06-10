@@ -69,7 +69,7 @@ qcolors = function(n, pal='Set1')
 distractor_plot <- function(dataSrc, item, predicate = NULL, nc=1, nr=1, legend = TRUE, ...){  
   qtpredicate = eval(substitute(quote(predicate)))
   
-  if(is.null(qtpredicate) & inherits(dataSrc,'DBIConnection'))
+  if(is.null(qtpredicate) && inherits(dataSrc,'DBIConnection'))
   {
     # cheat a little to make things faster
     qtpredicate = quote(booklet_id %in% booklets)
@@ -100,8 +100,7 @@ distractor_plot <- function(dataSrc, item, predicate = NULL, nc=1, nr=1, legend 
   rsp_counts = respData$x %>%
     group_by(.data$booklet_id, .data$response, .data$item_score, .data$sumScore) %>%
     summarise(n = n()) %>% 
-    ungroup()
-  
+    ungroup() 
 
   rsp_colors = rsp_counts %>%
     group_by(.data$response) %>%
@@ -113,14 +112,17 @@ distractor_plot <- function(dataSrc, item, predicate = NULL, nc=1, nr=1, legend 
   
   max_score = max(rsp_counts$item_score)
   # statistics by booklet
+  # join with design gets item position
   stats = respData$x %>%
     group_by(.data$booklet_id) %>% 
     summarise(pvalue = mean(.data$item_score)/max_score, 
               rit = cor(.data$item_score, .data$sumScore), 
-              rir = cor(.data$item_score, .data$sumScore - .data$item_score)) %>%
+              rir = cor(.data$item_score, .data$sumScore - .data$item_score),
+              n_book = n()) %>%
     ungroup() %>%
     inner_join(respData$design, by='booklet_id') %>%
     arrange(.data$booklet_id)
+    
 
   npic = nrow(stats)
   ly = my_layout(npic, nr, nc)
@@ -129,7 +131,9 @@ distractor_plot <- function(dataSrc, item, predicate = NULL, nc=1, nr=1, legend 
   
   rsp_counts = split(rsp_counts, rsp_counts$booklet_id)
 
+  # n>1 is bugfix, density needs at least two values
   stats %>%
+    filter( .data$n_book > 1 ) %>%
     rowwise() %>%
     do({
       st = as.list(.)
@@ -155,15 +159,21 @@ distractor_plot <- function(dataSrc, item, predicate = NULL, nc=1, nr=1, legend 
       N = sum(bkl_scores$n)
       
       # this generates the legend and has the  side effect of drawing the lines in the plot
-      lgnd = y %>% group_by(.data$response)  %>% do({
-        k = rsp_colors[rsp_colors$response == .$response[1],]$color
-
-        dxi = density(.$sumScore, n = 51, weights = .$n/sum(.$n), 
-                      bw = dAll$bw, from = min(dAll$x), to = max(dAll$x))
-        yy = dxi$y/dAll$y * sum(.$n)/N
-        graphics::lines(dAll$x, yy, co = k, lw = 2)
-        tibble(col = k, resp = paste0(.$response[1]," (", .$item_score[1], ")"))
-      })
+      # filter(n() > 1)  is bugfix, density needs at least two values
+      lgnd = y %>% 
+        group_by(.data$response)  %>% 
+        filter(n() > 1) %>%
+        do({
+          k = rsp_colors[rsp_colors$response == .$response[1],]$color
+    
+          dxi = density(.$sumScore, weights = .$n/sum(.$n),   n = 51,
+                          bw = dAll$bw, from = min(dAll$x), to = max(dAll$x))
+          yy = dxi$y/dAll$y * sum(.$n)/N
+          graphics::lines(dAll$x, yy, co = k, lw = 2)
+          tibble(col = k, resp = paste0(.$response[1]," (", .$item_score[1], ")"))
+     
+        })
+      
       if(legend)
       {
         graphics::legend("right", legend = as.character(lgnd$resp), 

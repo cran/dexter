@@ -2,7 +2,7 @@
 % Please edit documentation in R/dexter.R
 \name{add_booklet}
 \alias{add_booklet}
-\title{Add a booklet to a project}
+\title{Add response data for a booklet to a project}
 \usage{
 add_booklet(db, x, booklet_id, auto_add_unknown_rules = FALSE)
 }
@@ -17,13 +17,11 @@ correspond to the item_id's in the rules or the names of the person_properties. 
 \item{booklet_id}{A (short) string identifying the test form (booklet)}
 
 \item{auto_add_unknown_rules}{If FALSE (the default), an error will be generated if 
-some of the responses do not appear in the scoring rules.}
+some of the responses do not appear in the scoring rules. If TRUE, unknown responses will be
+assumed to have a score of 0.}
 }
 \value{
-A list of: \item{items}{The names of the columns in \code{x} that were
-treated as items}
-\item{person_properties}{The names of the columns in \code{x} that were
-treated as person properties}
+A list of with information about the recent import.
 \item{not_listed}{A data frame of all responses that will be treated as missing}
 }
 \description{
@@ -46,14 +44,10 @@ If a person_id is not supplied, dexter will generate unique person_id's for each
 Any column whose name has an exact match in the scoring rules inputted with
 function \code{start_new_project} will be treated as an item; any column whose name has an 
 exact match in the person_properties will be treated as a person property. If a name matches both
-a person property and an item, the item takes precedence. Columns other than items, person properties 
+a person_property and an item, the item takes precedence. Columns other than items, person properties 
 and person_id will be ignored.
 
-If \code{auto_add_unknown_rules=TRUE}, any responses to an item that do not have an 
-exact match in the scoring rules will be automatically given the lowest score of 0. 
-To score missing data differently, 
-or simply abide to good style, the user can include explicit entries for missing value
-indicators in the scoring rules. Note that responses are always treated as strings, and \code{NA}
+Note that responses are always treated as strings, and \code{NA}
 values are transformed to the string \code{"NA"}.
 }
 \examples{

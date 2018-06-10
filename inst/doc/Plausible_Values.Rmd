@@ -99,7 +99,7 @@ The remarkable thing about plausible values is that they will _eventually_ repro
 Observe that the gray bands are not wide, suggesting little uncertainty in determining the ECDF of ability. It may be more realistic to take the uncertainty in the item parameters into account. To do this, we will use a Gibbs sampler to draw 50 samples from the posterior distribution of the item parameters, and we will pick one of these at random each time we produce a plausible value. 
 
 First, a little function to accomplish this; note the use of the `use_draw` option which enables us to select every fifth sample from
-the Gibbs sampler that produced the sample of item parameters. Note that we have chosen every fifth sample to get rid of (most of) the autocorelation in the samples of item parameters.
+the Gibbs sampler that produced the sample of item parameters. Note that we have chosen every fifth sample to get rid of (most of) the autocorrelation in the samples of item parameters.
 
 ```{r}
 sim_PV2 = function(theta, delta) {
@@ -127,7 +127,7 @@ par(mfrow=c(1,1))
 
 The results show a small increase in variance but, with 300 persons, the item parameters have been estimated very precisely. Note that the user can accomplish the same goal by calling `plausible_values` without parms.
 
-To simulate abilties from a bi-modal distribution we assumed that the data consist of two groups of subjects; each with a different distribution of ability. If we had been aware of the presence of two groups we could have done better by specifying a different prior in each group. To this aim, the `plausible_values` function has the option to provide covariates. These covariates are assumed to be discrete and define groups. Each group will be allowed a possibly different (normal) prior. To show how this is done and also to illustrate that it is effective, we now include the group-membership in the model.
+To simulate abilities from a bi-modal distribution we assumed that the data consist of two groups of subjects; each with a different distribution of ability. If we had been aware of the presence of two groups we could have done better by specifying a different prior in each group. To this aim, the `plausible_values` function has the option to provide covariates. These covariates are assumed to be discrete and define groups. Each group will be allowed a possibly different (normal) prior. To show how this is done and also to illustrate that it is effective, we now include the group-membership in the model.
 
 ```{r make_pv3, results='hide',fig.align='center',fig.width=7}
 sim_Rasch2 = function(theta, delta,group) {

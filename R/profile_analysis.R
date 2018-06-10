@@ -42,11 +42,25 @@ profiles = function(dataSrc, parms, item_property, predicate=NULL)
 {
   qtpredicate = eval(substitute(quote(predicate)))
   
+  
+  if(!inherits(parms,'prms'))
+    stop('argument `parms` should be a parameters object resulting from fit_enorm')
+  
   if(inherits(dataSrc, 'data.frame'))
   {
+    if(!item_property %in% colnames(dataSrc))
+      stop(paste0('dataSrc should include a column `',item_property,'`'))
+    
     idom = distinct(dataSrc, .data$item_id, .data[[!item_property]])
+    
     if(nrow(idom) > nrow(distinct(idom, .data$item_id)))
       stop('Each item may only have a single item property')
+  } else
+  {
+    item_property = tolower(item_property)
+    
+    if(!item_property %in% dbListFields(dataSrc,'dxitems'))
+      stop(paste0('There is no item_property with name `',item_property,'` in your project'))
   }
   
   respData = get_resp_data(dataSrc, qtpredicate, summarised=FALSE, env=caller_env(), 
@@ -67,14 +81,24 @@ profiles = function(dataSrc, parms, item_property, predicate=NULL)
 #' @rdname profiles
 profile_tables = function(parms, domains, item_property, design = NULL)
 {
+  if(!inherits(parms,'prms'))
+    stop('argument `parms` should be a parameters object resulting from fit_enorm')
+  if(!inherits(domains,'data.frame'))
+    stop('argument domains should be a data.frame')
+  if(!'item_id' %in% colnames(domains))
+    stop('domains should include a column `item_id`')
+  if(!item_property %in% colnames(domains))
+    stop(paste0('domains should include a column `',item_property,'`'))
+  if(length(unique(domains$item_id)) < nrow(domains))
+    stop('column domains$item_id must be unique')
+  
+  
   if(is.null(design))
     design = lapply(parms$inputs$bkList, function(bk) tibble(booklet_id=bk$booklet,item_id=bk$items)) %>% bind_rows()
   
   if(!'booklet_id' %in% colnames(design)) design$booklet_id = 'all_items'
   # what if domains not a superset of design?
   
-  if(length(unique(domains$item_id)) < nrow(domains))
-    stop('column domains$item_id must be unique')
   
   design = design %>% 
     select(.data$booklet_id, .data$item_id) %>%
@@ -107,9 +131,11 @@ profile_tables = function(parms, domains, item_property, design = NULL)
 
 # prms is enorm params
 # A is a vector of lists containing mutually exclusive subsets (indexes in ssI)
+# TO DO; consider possibilities of Bayesian parms
 E_profile_enorm <- function(prms, A)
 {
   nSub=length(A)
+  if (prms$inputs$method == "Bayes") prms$est$b = colMeans(prms$est$b)
   Msc = sum(prms$inputs$ssIS$item_score[prms$inputs$ssI[sort(unlist(A)),]$last])
   Msc_sub = rep(0,nSub)
   

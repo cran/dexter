@@ -43,4 +43,6 @@ test_that('plausible scores works',{
   
   expect_true(cor(ps$PS_keep_true, ps$sumScore) > cor(ps$PS1, ps$sumScore))
   
+  
+  
 })

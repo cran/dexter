@@ -96,8 +96,6 @@ void PV0(double *b, int *a, int *first, int *last, double *mu, double *sigma, in
 {
   double atheta=0.0;
 	int x;
-	double *ptheta;
- 	ptheta=&atheta;
 	double *p=NULL, u;
 	int maxS=0, k=0;
  	GetRNGstate(); // get seed
@@ -178,12 +176,11 @@ void PV1(double *b, int *a, int *first, int *last, double *mu, double *sigma, in
 
 // Adapted by timo for inclusion of zero category
 // produces nPV plausible values per score
-void PV(double *b, int *a, int *first, int *last, double *mu, double *sigma, int *score, int *pop, int *nP, int *nI, int *nPop, int *nPV, double *theta)
+// Assumes normal priors for each of nPop populations where pop defines the population for each person
+void PV(double *b, int *a, int *first, int *last, double *mu, double *sigma, int *score, int *pop, int *nP, int *nI, int *nPV, double *theta)
 {
   double atheta=0.0;
   int x;
-  double *ptheta;
-  ptheta=&atheta;
   double *p=NULL, u;
   int maxS=0, k=0;
   GetRNGstate(); // get seed
@@ -220,6 +217,54 @@ void PV(double *b, int *a, int *first, int *last, double *mu, double *sigma, int
   free(p);
   PutRNGstate(); // put seed
 }
+
+// produces nPV plausible values per score
+// Assumes a mixture of two normals as prior 
+void PVMix(double *b, int *a, int *first, int *last, double *alpha, double *mu, double *sigma, int *score, int *nP, int *nI, int *nPV, double *theta)
+{
+  double atheta=0.0;
+  int x, cmp;
+  double *p=NULL, u;
+  int maxS=0, k=0;
+  GetRNGstate(); // get seed
+  for (int i=0;i<nI[0];i++) {if ((last[i]-first[i]+2)>maxS) {maxS=(last[i]-first[i]+2);}}
+  void *_p = realloc(p, ((maxS+1) * sizeof(double)));
+  p=(double*)_p;
+  for (int t=0;t<nPV[0];t++)
+  {
+    for (int person=0;person<nP[0];person++)
+    {
+      x=-1;
+      while (x!=score[person])
+      {
+        cmp = 0;
+        u = runif(0,1);
+        if (u<alpha[0]){ cmp = 1; }
+        atheta = rnorm(mu[cmp],sigma[cmp]);
+        x=0;
+        for (int i=0;i<nI[0];i++)
+        {
+          p[0]=b[first[i]]*exp(a[first[i]]*atheta); 
+          k=1;
+          for (int j=first[i]+1;j<=last[i];j++) // note the +1
+          {
+            p[k]=p[k-1]+b[j]*exp(a[j]*atheta);
+            k++;
+          }
+          u=p[k-1]*runif(0,1);
+          k=0;
+          while (u>p[k]) {k++;}
+          if (k>0) {x+=a[first[i]+k];} // note that -1 has been deleted
+        }
+      }
+      theta[t*nP[0]+person]=atheta;
+    }
+  }
+  free(p);
+  PutRNGstate(); // put seed
+}
+
+
 /*
  Inputs n; a vector of length Mxs+1, each entry corresponding to a score with the initial value npv.
  If a score is not possible given the weights in a n = 0

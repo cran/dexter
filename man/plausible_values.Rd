@@ -12,14 +12,14 @@ plausible_values(dataSrc, parms = NULL, predicate = NULL,
 
 \item{parms}{An object returned by function \code{fit_enorm} and containing
 parameter estimates. If parms is given the function provides plausible values conditional on the 
-item paramaters. These are considered known. If parms = NULL, the user is given 
-plausible values marginalized over the posterior distribution of the item parameters. 
+item parameters; i.e., these are considered known and might be based on a different data set. 
+If parms = NULL, the user is given plausible values marginalized over the posterior distribution of the item parameters. 
 In plain words, this means that the uncertainty of the item parameters is taken into account.}
 
 \item{predicate}{an expression to filter data. If missing, the function will use 
 all data in dataSrc}
 
-\item{covariates}{name or a vector of names of the variables to group the population, used to update the prior.
+\item{covariates}{name or a vector of names of the variables to group the populations used to improve the prior.
 A covariate must be a discrete person covariate (e.g. not a float) that indicates nominal categories, e.g. gender or school
 If dataSrc is a data.frame, it must contain the covariate.}
 
@@ -30,15 +30,15 @@ recognised automatically), the number of the random draw (iteration) to use
 in generating the PV. If NULL, all draws will be averaged; that is, the posterior means are used for the item parameters.
 If outside range, the last iteration will be used.}
 
-\item{asOPLM}{As a courtesy to the user who has an unhealthy habit to look at parameters or latent stuff, this option normalizes
-the item parameter as in OPLM output. Only used when there are no fixed pameters to determine the origin.}
+\item{asOPLM}{As a courtesy to the OPLM user, this option normalizes the item parameter as in OPLM output. 
+Is inactive when there are fixed pameters because their values determine the normalization.}
 }
 \value{
 A data.frame with columns booklet_id, person_id, sumScore and nPV plausible values
 named PV1...PVn.
 }
 \description{
-Draws plausible values based on sum scores
+Draws plausible values based on test scores
 }
 \examples{
 \dontrun{
@@ -71,5 +71,5 @@ close_project(db)
 }
 \references{
 Marsman, M., Maris, G., Bechger, T. M., and Glas, C.A.C. (2016) What can we learn from plausible values? 
-Psychometrika. 2016; 81: 274–289.
+Psychometrika. 2016; 81: 274–289. See also the vignette.
 }

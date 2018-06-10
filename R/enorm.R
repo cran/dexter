@@ -153,17 +153,28 @@ fit_enorm_ = function(dataSrc, qtpredicate = NULL, fixed_params = NULL, method=c
     has_fixed_parms = TRUE
     if(inherits(fixed_params,'prms'))
     {
-      #TO DO: if bayes -> colmeans
       #normalize to OPLM
       tmp = toOPLM(fixed_params$inputs$ssIS$item_score, fixed_params$est$b,fixed_params$inputs$ssI$first,fixed_params$inputs$ssI$last)
       fixed_params$est$b = toDexter(tmp$delta, tmp$a, tmp$first, tmp$last, re_normalize = FALSE)$est$b
       
-      fixed_b = (
-        fixed_params$inputs$ssIS %>%
-          add_column(b=fixed_params$est$b) %>%
-          right_join(ssIS, by=c('item_id','item_score')) %>%
-          arrange(.data$item_id,.data$item_score)
-      )$b
+      if (fixed_params$inputs$method=="CML")
+      {
+        fixed_b = (
+          fixed_params$inputs$ssIS %>%
+            add_column(b=fixed_params$est$b) %>%
+            right_join(ssIS, by=c('item_id','item_score')) %>%
+            arrange(.data$item_id,.data$item_score)
+        )$b
+      }else ## If fixed parms object is Bayesian we take colMeans
+      {
+        fixed_b = (
+          fixed_params$inputs$ssIS %>%
+            add_column(b=colMeans(fixed_params$est$b)) %>%
+            right_join(ssIS, by=c('item_id','item_score')) %>%
+            arrange(.data$item_id,.data$item_score)
+        )$b
+        warning("Posterior means are taken as values of fixed parameters")
+      }
     } else
     {
       # transform the oplmlike fixed params to the parametrization dexter uses internally
@@ -259,7 +270,7 @@ fit_enorm_ = function(dataSrc, qtpredicate = NULL, fixed_params = NULL, method=c
   outpt = list(est=result, 
                inputs=list(bkList=bkl, ssIS=ssIS, ssI=ssI, 
                            stb=stb, method=method, has_fixed_parms = has_fixed_parms), 
-               xpr=as.character(qtpredicate))
+               xpr=deparse(qtpredicate))
   class(outpt) = append('prms', class(outpt)) 
   outpt
 }

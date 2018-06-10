@@ -12,7 +12,7 @@
 
 <meta name="author" content="Timo Bechger" />
 
-<meta name="date" content="2018-05-17" />
+<meta name="date" content="2018-06-08" />
 
 <title>Exploring Differential Items Functioning with Dexter</title>
 
@@ -70,7 +70,7 @@ code > span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Inf
 
 <h1 class="title toc-ignore">Exploring Differential Items Functioning with Dexter</h1>
 <h4 class="author"><em>Timo Bechger</em></h4>
-<h4 class="date"><em>2018-05-17</em></h4>
+<h4 class="date"><em>2018-06-08</em></h4>
 
 
 
@@ -82,7 +82,7 @@ img{ border:none;}
 <p>Based on the theory given in <span class="citation">Bechger and Maris (2015)</span>, the function <code>DIF()</code> tests for differential items function (DIF) under an extended nominal response model. We illustrate how it works using the verbalAgression data.</p>
 <div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">db =<span class="st"> </span><span class="kw">start_new_project</span>(verbAggrRules, <span class="st">&quot;verbAggression.db&quot;</span>, <span class="dt">covariates=</span><span class="kw">list</span>(<span class="dt">gender=</span><span class="st">&quot;&quot;</span>))
 <span class="kw">add_booklet</span>(db, verbAggrData, <span class="st">&quot;data&quot;</span>)</code></pre></div>
-<pre><code>## no column `person_id` provided, automatically generating unqique person id's</code></pre>
+<pre><code>## no column `person_id` provided, automatically generating unique person id's</code></pre>
 <div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r"><span class="kw">add_item_properties</span>(db, verbAggrProperties)</code></pre></div>
 <p>Gender is available as a discrete covariate which defines two groups: male and female respondents. We first test whether there is DIF. Note that we see progress bars from two calls to <code>fit_enorm</code>; one for each group.</p>
 <div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">dif_gender=<span class="kw">DIF</span>(db,<span class="st">&quot;gender&quot;</span>)</code></pre></div>

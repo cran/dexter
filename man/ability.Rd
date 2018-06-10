@@ -27,9 +27,9 @@ parameter estimates}
 \item{prior}{If an EAP estimate is produced one can choose a normal prior or
 Jeffreys prior; i.e., a prior proportional to the square root of test information.}
 
-\item{use_draw}{When parms is Bayesian (this is recognised automatically), use_draw is 
+\item{use_draw}{When parms is Bayesian, use_draw is 
 the index of the posterior sample of the item 
-parameters that will be used to generating plausible values. 
+parameters that will be used for generating plausible values. 
 If use_draw=NULL, a posterior mean is used. 
 If outside range, the last iteration will be used.}
 

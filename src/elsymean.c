@@ -47,8 +47,8 @@ void ElSym(double *b, int *a, int *first, int *last, int *item1, int* item2, int
 {
   int Msc, idx;
  
- double *gg;
- gg=(double*)calloc((2*(mS[0]+1)), sizeof(double)); 
+  double *gg;
+  gg=(double*)calloc((2*(mS[0]+1)), sizeof(double)); 
   
   idx=0; // start from column one
   gg[0]=1;
@@ -352,7 +352,7 @@ void E0(double *b, int *a, int *first, int *last, int *nscore, int *nI, int *mS,
 
 void H0(double *b, int *a, int* nPar, int *first, int *last, int *nscore, int *nI, int *mS, double *Hess)
 {
-  int i1,i2,tel=-1, jump=0, idx;
+  int i1,i2,tel=-1, jump=0;
   double *g=NULL;
   double *gi=NULL;
   double *gk=NULL;
