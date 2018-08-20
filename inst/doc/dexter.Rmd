@@ -189,5 +189,10 @@ The results are striking: at any level of overall aggression, women want more th
 
 **dexter** contains many further tools and methods, which are discussed in separate vignettes. Most of the functions in the package accept an arbitrarily complex logical predicate involving booklets, items, responses, persons, person and item properties etc., on which to subset the data. An obvious use is to exclude, in a flexible way, some data from analysis. As subsetting can be applied to the functions independently, we can, e.g., estimate a model on one subset of examinees and apply it to another.
 
+```{r}
+close_project(db)
+```
+
+
 #References
 

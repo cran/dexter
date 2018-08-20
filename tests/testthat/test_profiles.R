@@ -1,3 +1,5 @@
+context('Test profile analysis')
+
 library(dplyr)
 library(tibble)
 library(DBI)
@@ -15,7 +17,7 @@ verbAggCopy = function(pth = '../verbAggression.db')
 }
 
 
-context('Check profile analysis')
+
 
 test_that('profile analysis verb agg',{
   db = verbAggCopy()
@@ -35,6 +37,10 @@ test_that('profile analysis verb agg',{
                     ungroup() %>%
                     pull(sum_dif) < 1e-10), 
               'expected domains scores need to sum to total test score')
+  
+  # check inputs work with just parms
+  pt = profile_tables(f, get_items(db),'situation')
+  
   # takes a little long for cran
   skip_on_cran()
   f = fit_enorm(db, method='Bayes')
@@ -53,7 +59,7 @@ test_that('profile analysis verb agg',{
                     pull(sum_dif) < 1e-10), 
               'expected domains scores need to sum to total test score (Bayes)')
   
-  
+  close_project(db)
 })
 
 

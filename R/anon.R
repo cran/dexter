@@ -18,7 +18,8 @@
 #   return(tmp)
 # }
 
-# Wrapper for C function that generates plausible values using a straightforward rejection algorithm
+# Wrapper for C function that generates plausible values using a straightforward rejection algorithm.
+# This one does not use recycling
 # Normal prior(s)
 # @param b          vector of beta's per item_score, including 0 category, ordered by item_id, item_score
 # @param a          vector of discriminations per item_score, inclusing 0 category, ordered by item_id, item_score
@@ -47,6 +48,63 @@ pv_ <- function(b,a,first,last,score,npv,mu,sigma,pop)
   if (npv>1) dim(tmp)=c(length(score),npv)
   return(tmp)
 }
+
+# score is a vector of scores
+# mu and sigma are scalar. One prior assumed
+# returned is a matrix with for each score (=row) npv plausible values
+pv_recycle <- function(b,a,first,last,score,npv,mu,sigma)
+{
+  # could be made slightly faster if score already sorted
+  #stopifnot(npv==1)
+  #pop = unique(pop)
+  #stopifnot(length(pop)==1)
+  
+  if (sigma<0) stop('prior standard deviation must be positive')
+  mx = sum(a[last])
+  
+  scrs = tibble(score=score) %>% 
+    mutate(indx = row_number()) %>%
+    arrange(.data$score)
+  
+  scr_tab = scrs %>%
+    group_by(.data$score) %>%
+    summarize(n=n()) %>%
+    ungroup() %>%
+    right_join(tibble(score=0L:mx),by='score') %>%
+    mutate(n=coalesce(n,0L)) %>%
+    arrange(.data$score) %>%
+    pull(.data$n) * npv
+  
+  cscr_tab = cumsum(scr_tab)
+
+  theta = rep(0,length(score)*npv)
+  
+
+  tmp=.C("PVrecycle",
+         as.double(b),
+         as.integer(a),
+         as.integer(first-1),
+         as.integer(last-1),
+         as.double(mu),
+         as.double(sigma),
+         as.integer(scr_tab),
+         as.integer(cscr_tab),
+         as.integer(length(score)*npv),
+         as.integer(length(first)),
+         as.integer(max(a)),
+         as.double(theta))[[12]]
+  
+  if(npv>1)
+  {
+    tmp = matrix(tmp, length(score), npv,byrow=TRUE)[order(scrs$indx),]
+  } else
+  {
+    tmp = tmp[order(scrs$indx)]
+  }
+  
+  return(tmp)
+}
+
 
 # Wrapper for C function that generates plausible values using a straightforward rejection algorithm
 # Mixture of two normals as flexible prior
@@ -84,25 +142,26 @@ pv_mix <- function(b,a,first,last,score,npv,p,mu,sigma, pop)
 #  0 to the maxScore on the test
 #  If a prior sample is provided this is used; Otherwise prior is normal(mu,sigma)
 #  A is a vector like a with alternative weightes. Used in theta_tables.
-recycle_pv = function(b, a, first, last, npv=1, mu=0, sigma=2, prior_sample=NULL, A=NULL)
+#  nscore is optional: a vector containing for each possible test score a frequency
+#  is !is.null(nscore) and !is.null(A) I assume that nscore refers to scores with A as weights
+#TO DO: This function needs to go in favour of pv_recycle
+recycle_pv = function(b, a, first, last, npv=1, mu=0, sigma=2, nscore = NULL, prior_sample=NULL, A=NULL)
 {
   if (is.null(A)){
     scores=0:sum(a[last])
     not_possible=setdiff(scores,possible_scores(a,first,last))
   }else {
     if (length(A)!=length(a)) stop("Wrong vector A in recycle_pv")
+    if (any(A)<0) stop("Negative weights in vector A in recycle_pv")
     scores=0:sum(A[last])
     not_possible=setdiff(scores,possible_scores(A,first,last))
   }
-  n=rep(npv,length(scores))
   
-  if (length(not_possible)>0)
-  {
-    warning("Some scores are not possible given the weights.")
-    n[not_possible+1]=0
-  }
+  if (is.null(nscore)) nscore=rep(1,length(scores))
+  n=nscore*npv
+  if (length(not_possible)>0) n[not_possible+1]=0
+  R=rep(0,sum(n))
   
-  R=rep(0,length(scores)*npv)
   nI=length(first)
   if (is.null(A))
   {
@@ -149,8 +208,12 @@ recycle_pv = function(b, a, first, last, npv=1, mu=0, sigma=2, prior_sample=NULL
            as.double(sigma),
            as.double(R))[[10]]
   }
-  dim(tmp)=c(length(scores),npv)
-  tmp[not_possible+1,]=NA
+  
+  
+    dim(tmp)=c(npv,length(scores))
+    tmp=t(tmp)
+    tmp[not_possible+1,]=NA
+  
   return(tmp)
 }
 
@@ -253,7 +316,7 @@ update_pv_prior_mixnorm = function (pv, p, mu, sigma, pop) {
 }
 
 
-
+# Plausible values. This one uses recycling 
 # @param x                tibble(booklet_id <char or int>, person_id <char>, sumScore <int>, pop <int>)
 # @param design           list: names: as.character(booklet_id), values: tibble(first <int>, last <int>) ordered by first
 # @param b                vector of b's per item_score, including 0 category, ordered by item_id, item_score
@@ -269,11 +332,21 @@ update_pv_prior_mixnorm = function (pv, p, mu, sigma, pop) {
 pv = function(x, design, b, a, nPV, from = 20, by = 5, prior.dist = c("normal", "mixture"))
 {
   prior.dist = match.arg(prior.dist)
-  prior.dist = "mixture"
   nPop = length(unique(x$pop))
   n_prior_updates = 10
-  if (prior.dist == "mixture") priors = list(p=c(0.6,0.4), mu=c(0,0.1), sigma=c(2,2), grp=sample(1:2, length(x$pop), replace=T, prob=c(0.5,0.5)))
-  if (prior.dist == "normal")  priors = list(mu=rep(0,nPop), sigma=rep(4,nPop))
+  
+  x$booklet_id = as.character(x$booklet_id)
+  
+  #if (prior.dist == "mixture") priors = list(p=c(0.6,0.4), mu=c(0,0.1), sigma=c(2,2), grp=sample(1:2, length(x$pop), replace=T, prob=c(0.5,0.5)))
+  if (prior.dist == "mixture")
+  {
+    priors = list(p=c(0.6,0.4), mu=c(0,0.1), sigma=c(2,2))
+    x$grp = sample(1:2, nrow(x), replace=T, prob=c(0.5,0.5))
+  } else if (prior.dist == "normal")
+  {
+    priors = list(mu=rep(0,nPop), sigma=rep(4,nPop))
+  }
+  
   
   if (is.matrix(b))
   {
@@ -282,26 +355,38 @@ pv = function(x, design, b, a, nPV, from = 20, by = 5, prior.dist = c("normal", 
     if (nrow(b)<nIter) stop(paste("at least", as.character(nIter), "samples of item parameters needed in function pv"))
     out_pv=matrix(0,length(x$sumScore),nPV)
  
-    add_pv = function(booklet_id, pop, sumScore, iter, priors, design, a, b, prior.dist)
-    {
-      bkID = as.character(booklet_id[1])
-      if (prior.dist == "mixture") out = pv_(b[iter,], a, design[[bkID]]$first, design[[bkID]]$last, sumScore, 1, priors$mu, priors$sigma, priors$grp)
-      if (prior.dist == "normal")  out = pv_(b[iter,], a, design[[bkID]]$first, design[[bkID]]$last, sumScore, 1, priors$mu, priors$sigma, pop)
-      return(out)
-    }
-    
     apv=1
     pb = txtProgressBar(min=0, max=nIter)
     for(iter in 1:nIter)
     {
-      x = x %>% 
-        group_by(.data$booklet_id) %>%
-        mutate(PVX = add_pv(.data$booklet_id, .data$pop, .data$sumScore, iter, priors, design, a, b, prior.dist)) %>%
-        ungroup()
-      
-      if (prior.dist == "mixture") priors = update_pv_prior_mixnorm(x$PVX, priors$p, priors$mu, priors$sigma)
-      if (prior.dist == "normal")  priors = update_pv_prior(x$PVX, x$pop, priors$mu, priors$sigma)
-      
+      if (prior.dist == "mixture")
+      {
+        x = x %>% 
+             group_by(.data$booklet_id, .data$grp) %>%
+             mutate(PVX = pv_recycle(b[iter,], a, 
+                                     design[[.data$booklet_id[1]]]$first, 
+                                     design[[.data$booklet_id[1]]]$last, 
+                                     .data$sumScore, 1, 
+                                     priors$mu[.data$grp[1]], priors$sigma[.data$grp[1]])) %>%
+             ungroup() 
+        
+        priors = update_pv_prior_mixnorm(x$PVX, priors$p, priors$mu, priors$sigma)
+        x$grp = priors$grp
+        
+      } else if (prior.dist == "normal") 
+      {
+        x = x %>% 
+          group_by(.data$booklet_id,.data$pop) %>%
+          mutate(PVX = pv_recycle(b[iter,], a, 
+                                  design[[.data$booklet_id[1]]]$first, 
+                                  design[[.data$booklet_id[1]]]$last, 
+                                  .data$sumScore, 1, 
+                                  priors$mu[.data$pop[1]], priors$sigma[.data$pop[1]])) %>%
+          ungroup()
+        
+        priors = update_pv_prior(x$PVX, x$pop, priors$mu, priors$sigma)
+      }
+
       if (iter == which.pv[apv])
       {
         colnames(x)[colnames(x)=='PVX'] = paste0('PV', iter)
@@ -310,30 +395,36 @@ pv = function(x, design, b, a, nPV, from = 20, by = 5, prior.dist = c("normal", 
       setTxtProgressBar(pb, value=iter)
     }
     close(pb)
-    x %>% 
-      select(.data$booklet_id, .data$person_id,.data$sumScore, matches('PV\\d+'))
+    return( select(x, .data$booklet_id, .data$person_id,.data$sumScore, matches('PV\\d+')))
     
   }else
   {
    for(iter in 1:n_prior_updates) 
    {
-      pv = x %>%
-        group_by(.data$booklet_id) %>%
-        do({
-         bkID = as.character(.$booklet_id[1])
-         tibble(pop=.$pop, pv = pv_(b, a, design[[bkID]]$first, design[[bkID]]$last, .$sumScore, 1, priors$mu, priors$sigma, .$pop))
-       }) %>%
-       ungroup()
+
+     pv = x %>%
+       group_by(.data$booklet_id,.data$pop) %>%
+       mutate(pv = pv_recycle(b, a, 
+                              design[[.data$booklet_id[1]]]$first, 
+                              design[[.data$booklet_id[1]]]$last, 
+                              .data$sumScore, 1, 
+                              priors$mu[.data$pop[1]], priors$sigma[.data$pop[1]])) %>%
+       ungroup() 
+
       priors = update_pv_prior(pv$pv,pv$pop,priors$mu,priors$sigma)
    }
-   x %>% 
-      group_by(.data$booklet_id) %>%
-      do({
-        bkID = as.character(.$booklet_id[1])
-        out_pv = pv_(b, a, design[[bkID]]$first, design[[bkID]]$last, .$sumScore, nPV, priors$mu, priors$sigma, .$pop)
-        data.frame(.$person_id, .$sumScore, as.data.frame(out_pv), stringsAsFactors = FALSE)
-      }) %>%
-      ungroup() 
+
+  return(  
+     x %>% 
+       group_by(.data$booklet_id, .data$pop) %>%
+       do({
+         bkID = .$booklet_id[1]
+         popnbr = .data$pop[1]
+         out_pv = pv_recycle(b, a, design[[bkID]]$first, design[[bkID]]$last, .$sumScore, nPV, priors$mu[popnbr], priors$sigma[popnbr])
+         data.frame(.$person_id, .$sumScore, as.data.frame(out_pv), stringsAsFactors = FALSE)
+        }) %>%
+       ungroup() %>%
+       select(-.data$pop)) 
   }
 }
 
@@ -416,6 +507,8 @@ E_score=function(theta,b,a,first,last)
   return(tmp)
 }
 
+
+
 # Expected distribution given one ability theta
 pscore <- function(theta, b, a, first, last)
 {
@@ -438,29 +531,33 @@ pscore <- function(theta, b, a, first, last)
 # The vector theta can be a set of quadrature points or 
 # estimates to compute their SE
 #
-IJ_=function(b,a,first,last, theta, log=FALSE) {
-  indx = first_last2indx(first,last)
-  a = a[indx]
-  b = b[indx]
+# Note: can not deal with Inf or NA values in theta
+IJ_ = function(b,a,first, last, theta, log=FALSE)
+{
+  nI = length(first)
+  nT = length(theta)
+  max_ncat = max(last-first) + 1L
+  I = rep(0, nI * nT)
+  J = rep(0, nI * nT)
+  logFi = rep(0, nT)
   
-  i = rep(1:length(first),times=last-first+1)
-  scores = 0:Reduce('+', by(a, i, max))
-  p = sweep(exp(outer(a,theta)), 1, b, '*')
-  hh = Reduce('+', by(p,i,function(x)log(colSums(x))))
-  l = sweep(outer(scores,theta), 2, hh, '-')
-  p = by(p, i, function(x)sweep(x,2,colSums(x),'/'), simplify=T)
-  p = do.call(rbind, lapply(p, as.matrix))
-  p = data.frame(A=a, p=p)
-  IJ = by(p, i, function(x){
-    M1 = colSums(m<-sweep(x[,-1],1,x$A,'*'))
-    M2 = colSums(m<-sweep(m,1,x$A,'*'))
-    M3 = colSums(sweep(m,1,x$A,'*'))
-    data.frame(I=M2-M1^2,J=M3-3*M1*M2+2*M1^3)
-  })
-  I = rowSums(sapply(IJ, function(x)x$I))
-  J = rowSums(sapply(IJ, function(x)x$J))
+  tmp=.C("IJ_c",
+         as.double(theta),
+         as.double(b),
+         as.integer(a),
+         as.integer(first-1),
+         as.integer(last-1),
+         as.double(I),
+         as.double(J),
+         as.double(logFi),
+         as.integer(nI),
+         as.integer(nT),
+         as.integer(max_ncat))
+
+  scores = 0:sum(a[last])
+  l = sweep(outer(scores,theta), 2, tmp[[8]], '-')
   if (!log) l=exp(l)
-  list(l=l,I=I, J=J)
+  return(list(I=colSums(matrix(tmp[[6]],nI,nT)), J=colSums(matrix(tmp[[7]],nI,nT)), l=l))
 }
 
 
@@ -469,26 +566,33 @@ IJ_=function(b,a,first,last, theta, log=FALSE) {
 # se is the option to calculate standard-errors or not
 theta_MLE <- function(b,a,first,last, se=FALSE)
 {
-  ms.a=sum(a[last])
-  theta=rep(0,ms.a-1)
-  for (s in 1:(ms.a-1))
-  {
-    escore=-1
-    while (abs(escore-s)>1e-1)
-    {
-      escore=E_score(theta[s],b,a,first,last)
-      theta[s]=theta[s]+log(s/escore)
-    }
-  }
-  theta=c(-Inf,theta,Inf)
-  sem=rep(NA,length(theta))
+  mx=sum(a[last])
+  theta=rep(0,mx-1)
+  max_a = max(a)
+
+  n=length(first)
+  theta = .C("theta_mle_c",
+           as.double(theta),
+           as.double(b),
+           as.integer(a),
+           as.integer(first-1L),
+           as.integer(last-1L),
+           as.integer(n),
+           as.integer(mx),
+           as.integer(max_a))[[1]]
+
+  sem = NULL
   if (se)
   {
     f = IJ_(b,a,first,last, theta)
-    sem=1/sqrt(f$I)
+    sem = c(NA, 1/sqrt(f$I), NA)
   }
+  theta=c(-Inf,theta,Inf)
+  
   return(list(theta=theta,se=sem))
 }
+
+
 
 ##### EAP based on npv (default 500) plausible values ####
 # Uses recycling to get npv plausible values for each sum score.
@@ -512,22 +616,32 @@ theta_MLE <- function(b,a,first,last, se=FALSE)
 ####
 theta_EAP <- function(b, a, first, last, npv=500, mu=0, sigma=4, smooth=FALSE, se=FALSE, A=NULL)
 {
-  tmp=recycle_pv(b, a, first, last, npv=npv, mu=mu, sigma=sigma, A)
-  theta=rowMeans(tmp)
+  if (!is.null(A)){
+    tmp=recycle_pv(b, a, first, last, npv=npv, mu=mu, sigma=sigma, A)
+    mx = sum(A[last])
+    theta = rep(NA,(mx+1))
+  }else
+  {
+    score = possible_scores(a,first,last)
+    tmp = pv_recycle(b,a,first,last,score,npv,mu,sigma)
+    mx = sum(a[last])
+    theta = rep(NA,(mx+1))
+  }
+  theta[score+1]=rowMeans(tmp)
   if (is.null(A))
   {
     if (smooth) {
-      score=0:sum(a[last])
+      score=0:mx
       theta = predict(lm(theta ~ poly(score,7)))
     }
-    sem=rep(NA,(sum(a[last])+1))
+    sem=rep(NA,(mx+1))
   }else
   {
     if (smooth) {
-      score=0:sum(A[last])
+      score=0:mx
       theta = predict(lm(theta ~ poly(score,7)))
     }
-    sem=rep(NA,(sum(A[last])+1))
+    sem=rep(NA,(mx+1))
   }
   if (se) sem=apply(tmp,1,sd)
   return(list(theta=theta, se=sem))
@@ -1101,6 +1215,7 @@ est_lambda <- function(b, a, first, last, scoretab)
 ## Or category-scores (a) are not increasing
 ## If fixed_b is not NULL unfixed c.q. free parameters are NA
 ## Note that fixed_b contains values in the dexter parametrisation (including 0 category)
+
 calibrate_CML <- function(booklet, sufI, a, first, last, nIter, fixed_b=NULL) {
   nb = length(booklet)
   ni = length(first)
@@ -1279,12 +1394,13 @@ ENORM2ScoreDist <- function (parms, degree=7, booklet_id)
   beta=as.numeric(qr$coefficients)[-1]
   
   lambda[is.na(lambda)]=0
+  mx = sum(a[last])
   g = elsym(b,a,first,last)
-  sc_obs=vector("numeric", sum(a[last])+1)
-  sc_sm=vector("numeric", sum(a[last])+1)
+  sc_obs=vector("numeric", mx+1)
+  sc_sm=vector("numeric", mx+1)
   num_obs=0.0
   num_sm=0.0
-  for (s in 0:sum(a[last]))
+  for (s in 0:mx)
   {
     sc_obs[s+1]=g[s+1]*lambda[s+1]
     sc_sm[s+1]=g[s+1]*exp(sum(beta*s^(1:degree)))

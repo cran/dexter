@@ -58,15 +58,23 @@ qcolors = function(n, pal='Set1')
 #' @param nr An integer between 1 and 3. Number of rows when putting mutiple plots
 #' on the same page. Default is 1. May be ignored or adjusted if it does not make sense.
 #' @param legend logical, whether to include the legend. default is TRUE
+#' @param curtains 100*the tail probability of the sum scores to be shaded. Default is 10.
+#' Set to 0 to have no curtains shown at all.
 #' @param ... further arguments to plot.
 #' @details 
-#' Customisation of title and subtitle can be done by using the arguments main and sub. 
+#' Customization of title and subtitle can be done by using the arguments main and sub. 
 #' These arguments can contain references to the variables item_id, booklet_id, item_position(only if dataSrc is a dexter db),
 #' pvalue, rit and rir. References are made by prefixing these variables with a dollar sign. Variable names may be postfixed 
 #' with a sprintf style format string, e.g. 
 #' \code{distractor_plot(db, main='item: $item_id', sub='Item rest correlation: $rir:.2f')}
 #' 
-distractor_plot <- function(dataSrc, item, predicate = NULL, nc=1, nr=1, legend = TRUE, ...){  
+distractor_plot <- function(dataSrc, item, predicate=NULL, nc=1, nr=1, legend=TRUE, curtains=10, ...){  
+  
+  old_par = par(no.readonly = TRUE)
+  
+  on.exit({par(old_par)})
+  
+  
   qtpredicate = eval(substitute(quote(predicate)))
   
   if(is.null(qtpredicate) && inherits(dataSrc,'DBIConnection'))
@@ -147,13 +155,20 @@ distractor_plot <- function(dataSrc, item, predicate = NULL, nc=1, nr=1, legend 
       plot.args$main = fstr(plot.args$main, st)
       plot.args$sub = fstr(plot.args$sub, st)
 
-      do.call(plot, plot.args)
-
       bkl_scores = y %>% 
         group_by(.data$sumScore) %>% 
         summarise(n = sum(.data$n)) %>%
         ungroup() %>%
         arrange(.data$sumScore)
+      
+      qua = curtains/200
+      qnt=NULL
+      if(qua>0 && qua<.5) {
+        qnt = quantile(rep(as.integer(bkl_scores$sumScore), bkl_scores$n), c(qua,1-qua))
+      }
+
+      do.call(plot, plot.args)
+      draw_curtains(qnt)
       
       dAll = density(bkl_scores$sumScore, n = 51, weights = bkl_scores$n/sum(bkl_scores$n))
       N = sum(bkl_scores$n)
@@ -179,9 +194,9 @@ distractor_plot <- function(dataSrc, item, predicate = NULL, nc=1, nr=1, legend 
         graphics::legend("right", legend = as.character(lgnd$resp), 
                          lty = 1, col = lgnd$col, cex = 0.8,lwd=2, box.lty = 0)
       }
-      data.frame()
+      tibble()
     })
-  if(nc>1 || nr>1) par(mfrow=c(1,1))
+
   invisible(NULL)
 }
 
@@ -204,7 +219,7 @@ distractor_plot <- function(dataSrc, item, predicate = NULL, nc=1, nr=1, legend 
 #' @details 
 #' Profile plots can be used to investigate whether two (or more) groups of respondents 
 #' attain the same test score in the same way. The user must provide a  
-#' (meaningfull) classification of the items in two non-overlapping subsets such that 
+#' (meaningful) classification of the items in two non-overlapping subsets such that 
 #' the test score is the sum of the scores on the subsets. 
 #' The plot shows the probabilities to obtain 
 #' any combinations of subset scores with thin gray lines indicating the combinations 

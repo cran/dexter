@@ -4,8 +4,8 @@
 \alias{plausible_scores}
 \title{Generate plausible testscores}
 \usage{
-plausible_scores(dataSrc, parms = NULL, predicate = NULL, items = NULL,
-  covariates = NULL, keep.observed = TRUE, nPS = 1)
+plausible_scores(dataSrc, parms = NULL, predicate = NULL,
+  items = NULL, covariates = NULL, keep.observed = TRUE, nPS = 1)
 }
 \arguments{
 \item{dataSrc}{Data source: a dexter project db handle or a data.frame with columns: person_id, item_id, item_score}

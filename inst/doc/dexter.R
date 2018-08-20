@@ -80,3 +80,6 @@ boxplot(PV1~gender, data=pv, border='black')
 ## ---- fig.width=5, fig.height=5------------------------------------------
 profile_plot(db, item_property='mode', covariate='gender')
 
+## ------------------------------------------------------------------------
+close_project(db)
+

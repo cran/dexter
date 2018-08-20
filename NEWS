@@ -1,3 +1,9 @@
+# dexter 0.8.1
+
+* significant speed increases in plausible_values, plausible_scores, ability and ability_tables
+* added plot method for the extended nominal response model
+* new function `add_response_data()` for importing normalized data
+
 # dexter 0.8.0
 
 * `profiles()` and `profile_tables()` functions added for analysis of individual deviation profiles
@@ -10,7 +16,7 @@
 
 # dexter 0.7.0
 
-* support for RSQLite releease 2.1.0+ which broke dexter 0.6.0. 
+* support for RSQLite release 2.1.0+ which broke dexter 0.6.0. 
 
 * `probability_to_pass()` function added for equating to a reference test that is 
   connected to a target test.
@@ -25,6 +31,7 @@
   
 * `plausible_scores()` function added to generate scores on arbitrary itemsets
   (or the entire bank). 
+  
 * Updates to documentation.
 
 

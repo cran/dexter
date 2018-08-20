@@ -1,3 +1,5 @@
+context('test database')
+
 library(dplyr)
 library(tibble)
 library(DBI)
@@ -5,7 +7,7 @@ library(RSQLite)
 
 
 
-context('test database')
+
 
 expect_no_error = function(object, info=NULL) expect_error(object, regexp=NA, info=info)
 
@@ -99,7 +101,7 @@ test_that('rule updates and sanity checks',
   
   ## less_than_two_scores
   # less than two scores is already covered above I think
-  
+  dbDisconnect(db)
 })
 
 
@@ -155,5 +157,5 @@ test_that('adding person and item properties',
   persons = get_persons(db)
   
   expect_true(all(persons$x == 4) && class(persons$x) == 'integer')
-  
+  dbDisconnect(db)
 })

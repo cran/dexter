@@ -23,7 +23,7 @@ and item_nbr (used for sorting items within cluster).}
 
 \item{sigma}{expected standard deviation of ability in population, used for scaling of the clusters}
 
-\item{population}{optionally a data.frame with columns test_score and frequency to use for visualisation in 3DC 
+\item{population}{optionally a data.frame with columns test_score and frequency to use for visualization in 3DC 
 application. If NULL, the distribution will be derived from a simulation.}
 
 \item{group_leader}{Login name of the group leader, default is admin. The default password is always

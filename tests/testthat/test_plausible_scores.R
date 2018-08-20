@@ -1,7 +1,9 @@
+context('test plausible_scores')
+
 library(dplyr)
 
 
-context('Check plausible_scores')
+
 
 test_that('plausible scores works',{
   skip_on_cran()

@@ -10,7 +10,7 @@ add_item_properties(db, item_properties = NULL, default_values = NULL)
 \item{db}{A handle to the dexter project database, e.g. the output of \code{start_new_project}
 or \code{open_project}}
 
-\item{item_properties}{A data frame containing a column item_id (mathcing item_id's already defined in the project)
+\item{item_properties}{A data frame containing a column item_id (matching item_id's already defined in the project)
 and 1 or more other columns with item properties (e.g. item_type, subject)}
 
 \item{default_values}{a list where the names are item_properties and the values are defaults.

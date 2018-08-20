@@ -4,8 +4,8 @@
 \alias{get_responses}
 \title{Selecting data}
 \usage{
-get_responses(dataSrc, predicate = NULL, columns = c("person_id", "item_id",
-  "item_score"))
+get_responses(dataSrc, predicate = NULL, columns = c("person_id",
+  "item_id", "item_score"))
 }
 \arguments{
 \item{dataSrc}{a dexter project database or data.frame}

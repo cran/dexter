@@ -83,7 +83,7 @@ create3DC = function(export_name)
 #' @param standards vector of standards to be set
 #' @param mu expected ability in population, used for scaling of the clusters
 #' @param sigma expected standard deviation of ability in population, used for scaling of the clusters
-#' @param population optionally a data.frame with columns test_score and frequency to use for visualisation in 3DC 
+#' @param population optionally a data.frame with columns test_score and frequency to use for visualization in 3DC 
 #' application. If NULL, the distribution will be derived from a simulation.
 #' @param group_leader Login name of the group leader, default is admin. The default password is always
 #' admin, but can be changed in the 3DC application.
@@ -94,8 +94,7 @@ create3DC = function(export_name)
 add_test3DC = function(db3dc, parms, design, test_id, standards, mu, sigma, 
                         population = NULL, group_leader = 'admin', omit = 0.0)
 {
-
-  # prevent stupid dplyr warnings
+  
   design$item_id = as.character(design$item_id)
   design$cluster = as.character(design$cluster)
   

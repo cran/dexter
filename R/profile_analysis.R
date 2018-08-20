@@ -30,12 +30,12 @@
 #' in this case by indicating how a test-taker, conditional on her/his test score, 
 #' performs on a number of pre-specified domains, e.g. in case of a mathematics test 
 #' the domains could be numbers, algebra and geometry or in case of a digital test the domains could be animated versus
-#'  unanimated items. This can be done by comparing the achieved score on a domain with the expected score, given the test score.
+#'  non-animated items. This can be done by comparing the achieved score on a domain with the expected score, given the test score.
 #' 
 #' 
 #' @references 
 #' Verhelst, N. D. (2012). Profile analysis: a closer look at the PISA 2000 reading data. 
-#' Scandinavian Journal of Educational Research, 56 (3), 315 – 332.
+#' Scandinavian Journal of Educational Research, 56 (3), 315-332.
 #' 
 #' 
 profiles = function(dataSrc, parms, item_property, predicate=NULL)
@@ -74,7 +74,8 @@ profiles = function(dataSrc, parms, item_property, predicate=NULL)
         profile_tables(parms = parms, design = respData$design, 
                        domains=distinct(respData$design, .data$item_id, .data[[!!item_property]]),
                        item_property = item_property),
-        by = c('booklet_id','sumScore',item_property))
+        by = c('booklet_id','sumScore',item_property)) %>%
+    as.data.frame()
 
 }
   
@@ -94,7 +95,18 @@ profile_tables = function(parms, domains, item_property, design = NULL)
   
   
   if(is.null(design))
-    design = lapply(parms$inputs$bkList, function(bk) tibble(booklet_id=bk$booklet,item_id=bk$items)) %>% bind_rows()
+  {
+    if(is.null(parms$inputs$design))
+    {
+      if(inherits(parms,'mst_enorm'))
+        message('Computing non-mst profile_tables over an mst design, did you mean to use profile_tables_mst?')
+      design = lapply(parms$inputs$bkList, function(bk) tibble(booklet_id=bk$booklet,item_id=bk$items)) %>% bind_rows()
+    } else
+    {
+      design = parms$inputs$design
+    }
+  }  
+
   
   if(!'booklet_id' %in% colnames(design)) design$booklet_id = 'all_items'
   # what if domains not a superset of design?
@@ -125,7 +137,8 @@ profile_tables = function(parms, domains, item_property, design = NULL)
         }
       ) %>%
       ungroup() %>%
-      select(-dcat)
+      select(-dcat) %>%
+      as.data.frame()
 
 }
 

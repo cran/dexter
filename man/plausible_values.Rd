@@ -41,15 +41,17 @@ named PV1...PVn.
 Draws plausible values based on test scores
 }
 \examples{
-\dontrun{
-db = start_new_project(verbAggrRules, "verbAggression.db", 
+db = start_new_project(verbAggrRules, ":memory:", 
    covariates=list(gender="<unknown>"))
 add_booklet(db, verbAggrData, "agg")
 add_item_properties(db, verbAggrProperties)
+
 f=fit_enorm(db)
-par(mfrow=c(1,2))
 pv_M=plausible_values(db,f,(mode=="Do")&(gender=="Male"))
 pv_F=plausible_values(db,f,(mode=="Do")&(gender=="Female"))
+
+par(mfrow=c(1,2))
+
 plot(ecdf(pv_M$PV1), 
    main="Do: males versus females", xlab="Ability", col="red")
 lines(ecdf(pv_F$PV1), col="green")
@@ -66,10 +68,9 @@ legend(-2.2,0.9, c("female", "male") ,
    lty=1, col=c('green', 'red'), bty='n', cex=.75)
    
 close_project(db)    
-}
 
 }
 \references{
 Marsman, M., Maris, G., Bechger, T. M., and Glas, C.A.C. (2016) What can we learn from plausible values? 
-Psychometrika. 2016; 81: 274–289. See also the vignette.
+Psychometrika. 2016; 81: 274-289. See also the vignette.
 }
