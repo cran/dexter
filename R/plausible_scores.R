@@ -81,7 +81,8 @@ plausible_scores = function(dataSrc, parms=NULL, predicate=NULL, items=NULL, cov
   a = parms$inputs$ssIS$item_score
   
   # now we make plausible values using all responses we stil have
-  pv = plausible_values_(respData, parms = parms, covariates = covariates, nPV = nPS, use_b_matrix = use_b_matrix, asOPLM = FALSE)
+  pv = plausible_values_(respData, parms = parms, covariates = covariates, nPV = nPS, 
+                         use_b_matrix = use_b_matrix)
 
   #save the design since respData may be mutilated below
   design = respData$design

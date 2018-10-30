@@ -61,7 +61,8 @@ probability_to_pass = function(dataSrc, ref_items, pass_fail, design = NULL, pre
   ##
  
   qtpredicate = eval(substitute(quote(predicate)))
-  respData = get_resp_data(dataSrc, qtpredicate, summarised=FALSE, env=caller_env())
+  env=caller_env()
+  respData = get_resp_data(dataSrc, qtpredicate, summarised=FALSE, env=env)
   
   ref_items = tibble(item_id = unique(ref_items))
   if(nrow(ref_items %>% anti_join(respData$design, by = 'item_id')) > 0)
@@ -97,7 +98,7 @@ probability_to_pass = function(dataSrc, ref_items, pass_fail, design = NULL, pre
   ref_last = pull(ref_ssI, 'last')
   
   # Get mean and sd of ability in sample
-  ab=ability(respData, f, method="ML", asOPLM = FALSE) 
+  ab=ability(respData, f, method="ML") 
   new_mu = mean(ab$theta[is.finite(ab$theta)])
   new_sigma = sd(ab$theta[is.finite(ab$theta)])
   

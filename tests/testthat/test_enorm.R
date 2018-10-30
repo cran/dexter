@@ -56,7 +56,7 @@ test_that('calibration of verbal aggression dataset matches oplm results, with f
   expect_lt(
     mean((coef(fx) %>%
             inner_join(oplm_params, by=c('item_id','item_score')) %>%
-            mutate(difference=abs(SE_b-se.b)))$difference),
+            mutate(difference=abs(SE_beta-se.b)))$difference),
     1e-3)
   
   # # check that Bayesian is reasonably close.

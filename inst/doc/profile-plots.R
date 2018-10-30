@@ -54,7 +54,7 @@ function (n, h = 11, c. = c(80, 5), l = c(35, 95), power = 0.6,
   return(rval)
 }
 
-## ---- figProf, echo=FALSE, results="hide",fig.height=4,fig.width=4,fig.align='center'----
+## ---- figProf, echo=FALSE, results="hide",fig.height=4,fig.width=4,fig.align='center',message=FALSE----
 # fig.align='center' does not work anymore when you specify any css styles
 # therefore the: display:block;margin: 0 auto;
 db = start_new_project(verbAggrRules, ":memory:", covariates=list(gender="<unknown>"))

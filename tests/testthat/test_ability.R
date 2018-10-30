@@ -30,6 +30,18 @@ test_that('verbAgg abilities are monotone increasing', {
   db = open_project('../verbAggression.db')
   f = fit_enorm(db)
   
+  # check ability mle is correct
+  es = expected_score(f)
+  expect_lt(
+    ability_tables(f) %>%
+      filter(is.finite(theta)) %>%
+      mutate(error = abs(sumScore - es(theta))) %>%
+      pull(error) %>%
+      mean(),
+    0.001,
+    label = "ability_tables mle on average estimated to within .001 of test_score")
+  
+  
   nscores = get_rules(db) %>%
     group_by(item_id) %>%
     summarize(m=max(item_score)) %>%
@@ -53,8 +65,12 @@ test_that('verbAgg abilities are monotone increasing', {
       expect_true(nrow(abl) == 0, info = paste('abilities not increasing verbAgg -',method))  
     }
   }
+
   dbDisconnect(db)
 })
+
+
+
 
 
 ## tests on big datasets

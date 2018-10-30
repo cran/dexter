@@ -1,9 +1,23 @@
 
 utils::globalVariables(c("."))
 
-############################################
-######      exported functions        ######
-############################################
+
+#' Dexter: data analyses for educational and psychological tests.
+#' 
+#' Dexter provides a comprehensive solution for managing and analyzing educational test data.
+#' 
+#' The main features are:
+#' 
+#' \itemize{
+#' \item project databases providing a structure for storing data about persons, items, responses and booklets.
+#' \item methods to assess data quality using Classical test theory and plots.
+#' \item CML calibration of the extended nominal response model and interaction model.
+#' }
+#' 
+#' To learn more about dexter, start with the vignettes: `browseVignettes(package="dexter")`  
+#' 
+"_PACKAGE"
+
 
 
 #' Start a new project
@@ -18,7 +32,8 @@ utils::globalVariables(c("."))
 #' for a new sqlite database to be created. If this name does not
 #' contain a path, the file will be created in the work
 #' directory. Any existing file with the same name will be overwritten.
-#' @param person_properties An optional list of person properties. Names should correspond to person_properties intended to be used in the project.
+#' @param person_properties An optional list of person properties. Names should correspond to person_properties 
+#' intended to be used in the project.
 #' Values are used as default (missing) values. The datatype will also be inferred from the values.
 #' Known person_properties will be automatically imported when adding response data with \code{\link{add_booklet}}. 
 #' @param covariates Deprecated alias for person_properties.
@@ -503,7 +518,6 @@ add_response_data = function(db, data, auto_add_unknown_rules = FALSE, missing_v
   }
   dbTransaction(db,{ 
   
-    
     user_booklets = distinct(data, .data$booklet_id)
     
     known_booklets = user_booklets %>%
@@ -511,7 +525,7 @@ add_response_data = function(db, data, auto_add_unknown_rules = FALSE, missing_v
     
     unknown_booklets = anti_join(user_booklets, known_booklets, by='booklet_id')
     
-    if(nrow(unknown_booklets) > 0)
+    if (nrow(unknown_booklets) > 0)
     {
       dbExecute(db,'INSERT INTO dxBooklets(booklet_id) VALUES(:booklet_id);',unknown_booklets)
       if('item_position' %in% colnames(data))
@@ -601,7 +615,7 @@ add_response_data = function(db, data, auto_add_unknown_rules = FALSE, missing_v
                     VALUES(:person_id, :booklet_id, :item_id, :response);', 
               data)
   })
-  cat(paste(n,'responses imported.'))
+  cat(paste(n,'responses imported.\n'))
   
 }
 
@@ -801,28 +815,29 @@ get_booklets = function(db) {
 #'
 #' @param db A handle to the database, i.e. the output of \code{start_new_project}
 #' or \code{open_project}
-#' @return A tibble with columns: item_property, type and values. Values shows 
+#' @return A tibble with columns: item_property, type and values. Values shows
 #' unique values for your item properties, cut off if there are many.
 #'
 get_item_properties = function(db) {
-  data = dbGetQuery(db, 'SELECT * FROM dxItems;') 
+  data = dbGetQuery(db, 'SELECT * FROM dxItems;')
   if(nrow(data) > 0 && ncol(data) > 1)
   {
+    vartypes = lapply(data, class)
+    vartypes = tibble(item_property = names(vartypes), type = unlist(vartypes))
+    
     data %>%
       gather(key='item_property', value='value', -.data$item_id) %>%
       group_by(.data$item_property) %>%
-      summarise(type = class(.data$value), values = paste(unique(.data$value), collapse=', ')) %>%
+      summarise(values = paste(unique(.data$value), collapse=', ')) %>%
       ungroup() %>%
-      mutate(values = if_else(nchar(.data$values) > 100, 
-                              paste0(substr(.data$values,1,100), '...'), 
+      mutate(values = if_else(nchar(.data$values) > 100,
+                              paste0(substr(.data$values,1,100), '...'),
                               .data$values)) %>%
+      inner_join(vartypes, by='item_property') %>%
+      select(.data$item_property, .data$type, .data$values) %>%
       as.data.frame()
   }
 }
-
-
-
-
 
 #' Person properties in a project
 #'
@@ -833,23 +848,26 @@ get_item_properties = function(db) {
 #' @return A tibble with columns: person_property, type and values. Values shows unique values for your person properties, cut off if there are many.
 #'
 get_person_properties = function(db) {
-  data = dbGetQuery(db, 'SELECT * FROM dxPersons;') 
+  data = dbGetQuery(db, 'SELECT * FROM dxPersons;')
 
   if(nrow(data) > 0 && ncol(data) > 1)
   {
+    vartypes = lapply(data, class)
+    vartypes = tibble(person_property = names(vartypes), type = unlist(vartypes))
+    
     data %>%
       gather(key='person_property', value='value', -.data$person_id) %>%
       group_by(.data$person_property) %>%
-      summarise(type = class(.data$value), values = paste(unique(.data$value), collapse=', ')) %>%
+      summarise( values = paste(unique(.data$value), collapse=', ')) %>%
       ungroup() %>%
-      mutate(values = if_else(nchar(.data$values) > 100, 
-                              paste0(substr(.data$values,1,100), '...'), 
+      mutate(values = if_else(nchar(.data$values) > 100,
+                              paste0(substr(.data$values,1,100), '...'),
                               .data$values)) %>%
+      inner_join(vartypes, by='person_property') %>%
+      select(.data$person_property, .data$type, .data$values) %>%
       as.data.frame()
   }
 }
-
-
 
 #' Items in a project
 #'
@@ -890,7 +908,8 @@ get_persons = function(db){
 #' 
 get_testscores = function(dataSrc, predicate=NULL) {
   qtpredicate = eval(substitute(quote(predicate)))
-  get_resp_data(dataSrc, qtpredicate, env=caller_env(), summarised=TRUE)$x %>%
+  env = caller_env()
+  get_resp_data(dataSrc, qtpredicate, env=env, summarised=TRUE)$x %>%
     select(.data$person_id, .data$booklet_id, test_score=.data$sumScore) %>%
     as.data.frame()
 }
@@ -989,14 +1008,14 @@ design_as_network = function(dataSrc, predicate = NULL, weights=c("items","respo
   w = match.arg(weights)
   qtpredicate = eval(substitute(quote(predicate)))
   
-  if(is.null(qtpredicate) & inherits(dataSrc,'DBIConnection'))
+  if(is.null(qtpredicate) && inherits(dataSrc,'DBIConnection'))
   {
     if(w == 'items')
     {
       design = dbGetQuery(dataSrc, 'SELECT booklet_id, item_id FROM dxBooklet_design;')
     } else
     {
-      # not entirely necessary to do a left join because booklet design can currently only be entered with respons data
+      # not entirely necessary to do a left join because booklet design can currently only be entered with response data
       # but we might want to separate that in the future to test for connectedness a priori
       design = dbGetQuery(dataSrc, 
                           'WITH pcount AS (SELECT booklet_id, item_id, COUNT(*) AS n FROM dxResponses GROUP BY booklet_id, item_id)
@@ -1007,10 +1026,12 @@ design_as_network = function(dataSrc, predicate = NULL, weights=c("items","respo
   {
     if(w == 'items')
     {
-      design = get_resp_data(dataSrc, qtpredicate, env=caller_env())$design
+	  env=caller_env()
+      design = get_resp_data(dataSrc, qtpredicate, env=env)$design
     } else
     {
-      design = get_resp_data(dataSrc, qtpredicate, env=caller_env())$x  %>%
+	  env=caller_env()
+      design = get_resp_data(dataSrc, qtpredicate, env=env)$x  %>%
         group_by(.data$booklet_id, .data$item_id) %>%
         summarise(n_persons = n()) %>%
         ungroup()

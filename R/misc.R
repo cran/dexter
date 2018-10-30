@@ -49,6 +49,12 @@ weighted_ntile = function(x, weights, n)
 #   ntile(x,n)[cumsum(weights)-weights+1]
 # }
 
+# non vectorized version of ifelse
+if.else = function(test, yes, no)
+{
+  if(isTRUE(test)) return(yes)
+  no
+}
 
 # does basic argument type and attribute checks with error messages
 # to do:
@@ -78,7 +84,7 @@ check_arg = function(x, type, name = deparse(substitute(x)), nullable = FALSE, .
   } else if(type %in% c('numeric','double'))
   {
     if(!is.numeric(x))
-      stop(paste0("Argument'",name, "' must be numeric"))
+      stop(paste0("Argument '",name, "' must be numeric"))
     
   } else if(!inherits(x, type))
   {
@@ -197,6 +203,7 @@ possible_scores <- function(a,first,last)
 
 
 first_last2indx = function(first,last) unlist(apply(data.frame(first,last),1,function(x) x[1]:x[2]))
+
 
 # internal utility function
 # @parameter ssI: ssI as found in parms object

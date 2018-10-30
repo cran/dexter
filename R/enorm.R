@@ -1,3 +1,159 @@
+#####################
+# Some functions to transform user-provided (i.e., fixed) parameter values from one 
+# parameterization to the other.
+#####################
+beta2eta <-function(first, last, parms.df, out.zero=TRUE, in.zero=FALSE)
+{
+  df.new = parms.df
+  df.new$eta = beta2eta_(df.new$item_score, df.new$beta, first, last)
+  if (out.zero!=in.zero)
+  {
+    if (in.zero) df.new = parms.df[-first,] # zero in but not out
+    if (out.zero) # zero out but not in
+    {
+      tmp = add_zero(parms.df$item_score, parms.df$b, first, last)
+      df.new = data.frame(item_id = rep("i",length(tmp$a)), item_score = tmp$a, 
+                          beta = rep(0,length(tmp$a)), eta = rep(0,length(tmp$a)),
+                          stringsAsFactors = FALSE)
+      for (i in 1:length(tmp$first))
+      {
+        df.new$item_id[tmp$first[i]:tmp$last[i]] = parms.df$item_id[first[i]]
+        df.new$beta[(tmp$first[i]+1):tmp$last[i]] = parms.df$beta[first[i]:last[i]]
+        df.new$eta[(tmp$first[i]+1):tmp$last[i]] = parms.df$eta[first[i]:last[i]]
+      }
+    }
+  }
+  return(df.new)
+}
+
+beta2b <-function(first, last, parms.df, out.zero=TRUE, in.zero=FALSE)
+{
+  df.new = parms.df
+  df.new$b = eta2b_(beta2eta_(df.new$item_score, df.new$beta, first, last))
+  if (out.zero!=in.zero)
+  {
+    if (in.zero) df.new = parms.df[-first,] # zero in but not out
+    if (out.zero) # zero out but not in
+    {
+      tmp = add_zero(df.new$item_score, df.new$b, first, last)
+      df.new = data.frame(item_id = rep("i",length(tmp$a)), item_score = tmp$a, 
+                          beta = rep(0,length(tmp$a)), b = tmp$b,
+                          stringsAsFactors = FALSE)
+      for (i in 1:length(tmp$first))
+      {
+        df.new$item_id[tmp$first[i]:tmp$last[i]] = parms.df$item_id[first[i]]
+        df.new$beta[(tmp$first[i]+1):tmp$last[i]] = parms.df$beta[first[i]:last[i]]
+      }
+    }
+  }
+  return(df.new)
+}
+
+eta2b <-function(first, last, parms.df, out.zero=TRUE, in.zero=FALSE)
+{
+  df.new = parms.df
+  df.new$b = eta2b_(df.new$eta)
+  if (out.zero!=in.zero)
+  {
+    if (in.zero) df.new = parms.df[-first,] # zero in but not out
+    if (out.zero) # zero out but not in
+    {
+      tmp = add_zero(df.new$item_score, df.new$b, first, last)
+      df.new = data.frame(item_id = rep("i",length(tmp$a)), item_score = tmp$a, 
+                          eta = rep(0,length(tmp$a)), b = tmp$b,
+                          stringsAsFactors = FALSE)
+      for (i in 1:length(tmp$first))
+      {
+        df.new$item_id[tmp$first[i]:tmp$last[i]] = parms.df$item_id[first[i]]
+        df.new$eta[(tmp$first[i]+1):tmp$last[i]] = parms.df$eta[first[i]:last[i]]
+      }
+    }
+  }
+  return(df.new)
+}
+
+b2b <-function(first, last, parms.df, out.zero=TRUE, in.zero=TRUE)
+{
+  df.new=parms.df
+  if (out.zero!=in.zero)
+  {
+    if (in.zero) df.new = parms.df[-first,] # zero in but not out
+    if (out.zero) # zero out but not in
+    {
+      tmp = add_zero(parms.df$item_score, parms.df$b, first, last)
+      df.new = data.frame(item_id = rep("i",length(tmp$a)), item_score = tmp$a, 
+                          b = tmp$b, stringsAsFactors = FALSE)
+      for (i in 1:length(tmp$first))
+      {
+        df.new$item_id[tmp$first[i]:tmp$last[i]] = parms.df$item_id[first[i]]
+        df.new$eta[(tmp$first[i]+1):tmp$last[i]] = parms.df$eta[first[i]:last[i]]
+      }
+    }
+  }
+  return(df.new)
+}
+
+# item_id, item_score, and b, eta of beta
+transform.df.parms = function(parms.df, out.format = c('b','beta','eta'), include.zero = TRUE)
+{
+  # start with many checks
+  out.format = match.arg(out.format)
+  colnames(parms.df) = tolower(colnames(parms.df))
+  
+  in.format = intersect(colnames(parms.df), c('b','beta','eta'))
+  
+  if(length(in.format) == 0)
+    stop('parameters must contain at least one of following columns: b, beta, eta')
+  
+  if(length(in.format)>1)
+  {
+    in.format = in.format[1]
+    message(paste0("Using '",in.format,"' as input parameter"))
+  }
+  
+  if(!all(c('item_id','item_score') %in% colnames(parms.df)))
+    stop('parameters must contain the columns: item_id, item_score')
+  
+  if(any(parms.df$item_score%%1 > 0))
+    stop("column 'item_score' must be integer valued")
+  
+  parms.df = parms.df %>% 
+    mutate(item_id = as.character(.data$item_id), item_score = as.integer(.data$item_score)) %>%
+    arrange(.data$item_id, .data$item_score)
+  
+  
+  mm = parms.df %>% 
+    group_by(.data$item_id) %>% 
+    summarise(min_score = min(.data$item_score), max_score = max(.data$item_score)) %>%
+    ungroup()
+  
+  in.zero = any(mm$min_score == 0)
+  
+  if(in.zero && any(mm$min_score) != 0)
+    stop("Either all item paramters should include a zero score parameter or none should")
+  
+  if(any(mm$max_score == 0))
+    stop('All items should contain at least one non-zero score parameter')
+  
+  if(any(mm$min_score<0))
+    stop("Negative scores are not allowed")
+
+  if(in.format == 'b' && any(parms.df$b < 0))
+      stop("A 'b' parameter cannot be negative, perhaps you meant to include a 'beta' parameter?")
+  
+  fl = parms.df %>%
+    mutate(rn = row_number()) %>%
+    group_by(.data$item_id) %>% 
+    summarize(first = min(.data$rn), last=max(.data$rn)) %>%
+    ungroup()
+  
+  args = list(first = fl$first, last = fl$last, parms.df = parms.df, 
+              out.zero = include.zero, in.zero = in.zero)
+  do.call(get(paste0(in.format,'2',out.format)), args)
+}
+
+
+
 
 ##########################################
 #' Fit the extended nominal response model
@@ -9,8 +165,7 @@
 #' @param dataSrc Data source: a dexter project db handle or a data.frame with columns: person_id, item_id, item_score
 #' @param predicate An optional expression to subset data, if NULL all data is used
 #' @param fixed_params Optionally, a prms object from a previous analysis or 
-#' a data.frame with columns: item_id, item_score (omitting 0 score category) and beta. To facilitate the user in 
-#' entering parameter values, we assume the parameterisation used by OPLM; in short, beta's are thresholds between categories.
+#' a data.frame with columns: item_id, item_score (omitting 0 score category) and beta. To facilitate the user in entering parameter values, we assume the parameterisation used by OPLM; in short, beta's are thresholds between categories. At this moment, it is not possible to fix some but not all categories of an item.
 #' @param method If CML, the estimation method will be Conditional Maximum Likelihood;
 #' otherwise, a Gibbs sampler will be used to produce a sample from the posterior
 #' @param nIterations Number of Gibbs samples when estimation method is Bayes. The maximum 
@@ -30,14 +185,14 @@ fit_enorm = function(dataSrc, predicate = NULL, fixed_params = NULL, method=c("C
   qtpredicate = eval(substitute(quote(predicate)))
   check_arg(dataSrc, 'dataSrc')
   check_arg(nIterations, 'integer', .length=1)
-  
-  fit_enorm_(dataSrc, qtpredicate = qtpredicate, fixed_params = fixed_params, method=method, nIterations=nIterations, env=caller_env())
+  env=caller_env()
+  fit_enorm_(dataSrc, qtpredicate = qtpredicate, fixed_params = fixed_params, method=method, nIterations=nIterations, env=env)
 }
 
 
 fit_enorm_ = function(dataSrc, qtpredicate = NULL, fixed_params = NULL, method=c("CML", "Bayes"), nIterations=500, env=NULL) 
 {
-  method <- match.arg(method)
+  method = match.arg(method)
   if(is.null(env)) env = caller_env()
   
   r = get_resp_data(dataSrc, qtpredicate, summarised=FALSE, env=env)
@@ -64,16 +219,13 @@ fit_enorm_ = function(dataSrc, qtpredicate = NULL, fixed_params = NULL, method=c
     stop('One or more items has a maximum score of 0')
   # for now, just error. May possibly become warning later
   
-  #if(any(itm_max$nsc) < 2)
-  #  stop('One or more items has no score variation at all')
-	  # not sure if this should be allowed
 
   ssBIS = x %>% 
     group_by(.data$booklet_id, .data$item_id, .data$item_score) %>% 
     summarise(sufI=n(), sufC=sum(.data$item_score * .data$sumScore)) %>% 
     ungroup()
   
-  # mean item score per booklet score, can possibly be removed
+
   plt = x %>% 
     group_by(.data$booklet_id, .data$item_id, .data$sumScore) %>% 
     summarise(meanScore=mean(.data$item_score), N=n()) %>% 
@@ -91,13 +243,13 @@ fit_enorm_ = function(dataSrc, qtpredicate = NULL, fixed_params = NULL, method=c
     do(tibble(sumScore=0:.$maxTotScore)) %>%
     ungroup()
   
-  
-  stb = plt %>%
-    distinct(.data$booklet_id, .data$sumScore, .data$N) %>%
+
+  stb = distinct(x,.data$person_id,.data$booklet_id,.keep_all=T) %>%
+    group_by(.data$booklet_id, .data$sumScore) %>%
+    summarize(N=n()) %>%
     right_join(allScores, by=c('booklet_id','sumScore')) %>%
     mutate(N=coalesce(.data$N, 0L)) %>%
     arrange(.data$booklet_id, .data$sumScore)
-  
 
   ssIS = ssBIS %>% 
     group_by(.data$item_id, .data$item_score) %>%
@@ -118,13 +270,6 @@ fit_enorm_ = function(dataSrc, qtpredicate = NULL, fixed_params = NULL, method=c
     inner_join(ssI,by='item_id') %>%
     arrange(.data$booklet_id, .data$first)
   
-  # persons per booklet
-  # m = x  %>% 
-  #   group_by(.data$booklet_id)  %>% 
-  #   summarise(m = n_distinct(.data$person_id)) %>%
-  #   ungroup() %>%
-  #   arrange(.data$booklet_id)
-  
   a = ssIS$item_score
   
   bkl = lapply(split(design,design$booklet_id),
@@ -132,134 +277,73 @@ fit_enorm_ = function(dataSrc, qtpredicate = NULL, fixed_params = NULL, method=c
     {
         booklet_id = bkd$booklet_id[1]
         scoretab = stb$N[stb$booklet_id==booklet_id]
-        list(booklet_id=booklet_id,
-             first=bkd$first,
-             last=bkd$last,
+        list(booklet_id = booklet_id,
+             first = bkd$first,
+             last = bkd$last,
              scoretab = scoretab,
-             m=sum(scoretab),
-             lambda=rep(1,length(scoretab)))
+             m = sum(scoretab),
+             lambda = rep(1,length(scoretab)))
     })
 
   
-  it_sc_lab = paste0(ssIS$item_id[-ssI$first], "_",ssIS$item_score[-ssI$first])
+  #it_sc_lab = paste0(ssIS$item_id[-ssI$first], "_",ssIS$item_score[-ssI$first])
+  fixed_b = NULL
+  has_fixed_parms = !is.null(fixed_params)
   
   ## deal with fixed parameters
-  if(is.null(fixed_params))
-  { 
-    has_fixed_parms = FALSE
-    fixed_b = NULL
-  } else 
+  if(has_fixed_parms)
   {
-    has_fixed_parms = TRUE
     if(inherits(fixed_params,'prms'))
     {
-      #normalize to OPLM
-      tmp = toOPLM(fixed_params$inputs$ssIS$item_score, fixed_params$est$b,fixed_params$inputs$ssI$first,fixed_params$inputs$ssI$last)
-      fixed_params$est$b = toDexter(tmp$delta, tmp$a, tmp$first, tmp$last, re_normalize = FALSE)$est$b
+      if (fixed_params$inputs$method!="CML")
+        message("Posterior means are taken as values of fixed parameters")
       
-      if (fixed_params$inputs$method=="CML")
-      {
-        fixed_b = (
-          fixed_params$inputs$ssIS %>%
-            add_column(b=fixed_params$est$b) %>%
-            right_join(ssIS, by=c('item_id','item_score')) %>%
-            arrange(.data$item_id,.data$item_score)
-        )$b
-      }else ## If fixed parms object is Bayesian we take colMeans
-      {
-        fixed_b = (
-          fixed_params$inputs$ssIS %>%
-            add_column(b=colMeans(fixed_params$est$b)) %>%
-            right_join(ssIS, by=c('item_id','item_score')) %>%
-            arrange(.data$item_id,.data$item_score)
-        )$b
-        warning("Posterior means are taken as values of fixed parameters")
-      }
+      fixed_params = fixed_params$inputs$ssIS %>%
+        add_column(b = if.else(fixed_params$inputs$method=="CML", fixed_params$est$b, colMeans(fixed_params$est$b))) %>%
+        right_join(ssIS, by=c('item_id','item_score')) %>%
+        arrange(.data$item_id,.data$item_score) 
     } else
     {
-      # transform the oplmlike fixed params to the parametrization dexter uses internally
+      # transform the fixed params to the b parametrization dexter uses internally
+      fixed_params = transform.df.parms(fixed_params, out.format = 'b', include.zero = TRUE) 
+    }  
+    # check for missing categories in fixed_params, necessary?
+    missing_cat = ssIS %>% 
+      semi_join(fixed_params, by='item_id') %>%
+      left_join(fixed_params, by=c('item_id','item_score')) %>%
+      filter(is.na(.data$b) & .data$item_score != 0) 
       
-      #some cleaning and checking
-      fixed_params = fixed_params %>% 
-        mutate(item_id=as.character(.data$item_id), item_score = as.integer(.data$item_score))
-      
-      if(length(setdiff(c('item_id','item_score','beta'),colnames(fixed_params))) > 0)
-      {
-        stop(paste('fixed_params does not contain required column(s):',
-                   paste0(setdiff(c('item_id','item_score','beta'),colnames(fixed_params)),collapse=',')))
-      }
-      # check for missing categories in fixed_params
-      # missing categories in data are presumably not a problem
-      missing_cat = ssIS %>% 
-        semi_join(fixed_params, by='item_id') %>%
-        left_join(fixed_params, by=c('item_id','item_score')) %>%
-        filter(is.na(.data$beta) & .data$item_score != 0) 
-      
-      if(nrow(missing_cat) > 0)
-      {
-        cat(paste('Some score categories are fixed while some are not, for the same item.',
-                  'Dexter does not know how to deal with that.\nThe following score categories are missing:\n'))
-        missing_cat %>% 
-          select(.data$item_id, .data$item_score) %>%
-          arrange(.data$item_id, .data$item_score) %>%
-          as.data.frame() %>%
-          print()
-        stop('missing score categories for fixed items, see output')
-      }
-  
-      
-      # we have to mimic the positional dexter structure to be able to call toDexter
-      # omit itemscores not found in data
-      # an alternative would be to keep them, but that would possibly mess up the prms object
-      # I do wonder if it is better to throw them out before or after the toDexter call
-      fixed_params = fixed_params %>%
-        semi_join(ssIS, by=c('item_id','item_score')) %>%
-        filter(.data$item_score != 0) %>%
-        arrange(.data$item_id, .data$item_score) 
-      
-      fixed_ssI  = fixed_params %>% 
-        group_by(.data$item_id) %>%
-        summarise(nCat = n()) %>% 
-        mutate(first = cumsum(.data$nCat) - .data$nCat + 1L,last = cumsum(.data$nCat)) %>%
-        ungroup() %>%
-        arrange(.data$item_id)
-      
-      # now we will unfortunately loose the item id's 
-      # which we'll need to join the fixed and unfixed again to get them in the right order
-      # we also have to include the 0 category again
-      dx_b = toDexter(fixed_params$beta, fixed_params$item_score, fixed_ssI$first, fixed_ssI$last, 
-                      re_normalize=FALSE)
-      dx_b = tibble(item_score = as.integer(dx_b$inputs$ssIS$item_score), 
-                    b = dx_b$est$b,
-                    item_id = (fixed_params %>%
-                                 group_by(.data$item_id) %>% 
-                                 do({tibble(item_id=c(.$item_id,as.vector(.$item_id)[1]))})
-                                )$item_id )
-
-      # make a tibble of the fixed items including the 0 categories and 
-      # cbind with the dexter parametrization
-      # then join with all the items again
-      fixed_b = dx_b %>%
-        right_join(ssIS, by=c('item_id','item_score')) %>%
+    if(nrow(missing_cat) > 0)
+    {
+      cat(paste('Some score categories are fixed while some are not, for the same item.',
+                'Dexter does not know how to deal with that.\nThe following score categories are missing:\n'))
+      missing_cat %>% 
+        select(.data$item_id, .data$item_score) %>%
         arrange(.data$item_id, .data$item_score) %>%
-        pull(.data$b) 
+        as.data.frame() %>%
+        print()
+      stop('missing score categories for fixed items, see output')
     }
+      
+    fixed_b = fixed_params %>%
+      right_join(ssIS, by=c('item_id','item_score')) %>%
+      arrange(.data$item_id,.data$item_score) %>%
+      pull(.data$b)
+    
     # this test fails for some reason
-    if(!any(is.na(fixed_b))) stop('nothing to calibrate, all parameters are fixed')
+    if(!anyNA(fixed_b)) stop('nothing to calibrate, all parameters are fixed')
   }
   
   if (method=="CML"){
     result = try(calibrate_CML(booklet=bkl, sufI=ssIS$sufI, a=ssIS$item_score, 
                                first=ssI$first, last=ssI$last, nIter=nIterations,
                                fixed_b=fixed_b))
-    names(result$b)= paste0(ssIS$item_id, "_",ssIS$item_score)
-    row.names(result$beta.cml)=it_sc_lab
-    rownames(result$acov.cml)=it_sc_lab
-    colnames(result$acov.cml)=it_sc_lab
-  } else {
-    #itemList = lapply(ssI$item_id, function(x) design$booklet_id[design$item_id==x])
-    #itemListInt = lapply(itemList, function(x) match(x,m$booklet_id))
-    
+    #names(result$b)= paste0(ssIS$item_id, "_",ssIS$item_score)
+    #row.names(result$beta)=it_sc_lab
+    #rownames(result$acov.beta)=it_sc_lab
+    #colnames(result$acov.beta)=it_sc_lab
+  } else 
+  {
     design = design %>%
       mutate(bn=dense_rank(.data$booklet_id)) %>%
       arrange(.data$first, .data$bn)
@@ -271,8 +355,8 @@ fit_enorm_ = function(dataSrc, qtpredicate = NULL, fixed_params = NULL, method=c
     result = try(calibrate_Bayes(itemList=itemListInt, booklet=bkl, sufI=ssIS$sufI, b=b, a=a, 
                                  first=ssI$first, last=ssI$last, nIter=nIterations,
                                  fixed_b=fixed_b))
-    colnames(result$b)= paste0(ssIS$item_id, "_",ssIS$item_score) 
-    colnames(result$beta.cml)=it_sc_lab
+    #colnames(result$b)= paste0(ssIS$item_id, "_",ssIS$item_score) 
+    #colnames(result$beta)=it_sc_lab
   }
   if (inherits(result, "try-error")) stop('Calibration failed')
   
@@ -280,7 +364,7 @@ fit_enorm_ = function(dataSrc, qtpredicate = NULL, fixed_params = NULL, method=c
   abl_tables$mle = NULL
   
   outpt = list(est=result, 
-               inputs=list(bkList=bkl, ssIS=ssIS, ssI=ssI, design=r$design,plt=plt,#stb=stb,
+               inputs=list(bkList=bkl, ssIS=ssIS, ssI=ssI, design=r$design,plt=plt,
                             method=method, has_fixed_parms = has_fixed_parms), 
                abl_tables = abl_tables,
                xpr=deparse(qtpredicate))
@@ -288,22 +372,6 @@ fit_enorm_ = function(dataSrc, qtpredicate = NULL, fixed_params = NULL, method=c
   outpt
 }
 
-
-
-enorm_exp = Vectorize(
-  function(theta, alpha, beta)
-  {
-    m = length(beta)
-    dnm = 1
-    nm = 0
-    for (j in 1:m)
-    {
-      nm = nm + alpha[j]*exp(alpha[j]*theta - sum(beta[1:j]))
-      dnm = dnm + exp(alpha[j]*theta - sum(beta[1:j]))
-    }
-    nm/dnm
-  },
-  vectorize.args = 'theta')
 
 
 
@@ -327,7 +395,7 @@ plot.prms = function(x,item_id=NULL, nbins=5, ci = .95, ...)
   if(is.null(x$inputs$plt))
   {
     if(inherits(x,'mst_enorm')) stop('Sorry, the plot method for enorm_mst will only be supported in dexterMST from version 0.1.1 onwards')
-    stop('Sorry, the plot method is only available for parameters objects produced with dexter 0.8.1 or later')
+    stop('Sorry, the plot method is only available for parameter objects produced with dexter 0.8.1 or later')
   }
   
   # if no item id provided plot them all
@@ -346,11 +414,12 @@ plot.prms = function(x,item_id=NULL, nbins=5, ci = .95, ...)
   # for dplyr
   item_id_ = item_id
   
-  
-  cf = filter(coef(x), .data$item_id==item_id_)
-  if(x$inputs$method == 'Bayes')
-    cf$beta = cf$mean_beta
-  max_score = max(cf$item_score)
+  expf = expected_score(x, items = item_id)
+
+  max_score = x$inputs$ssIS %>%
+    filter(.data$item_id == item_id_) %>%
+    pull(.data$item_score) %>%
+    max()
   
   plt = x$inputs$plt %>%
     filter(.data$item_id==item_id_) %>%
@@ -360,7 +429,7 @@ plot.prms = function(x,item_id=NULL, nbins=5, ci = .95, ...)
     group_by(.data$abgroup) %>%
     summarize(gr_theta = weighted.mean(.data$theta,.data$N), avg_score = weighted.mean(.data$meanScore,.data$N), n=sum(.data$N)) %>%
     ungroup() %>%
-    mutate(expected_score = enorm_exp(.data$gr_theta, cf$item_score, cf$beta))
+    mutate(expected_score = expf(.data$gr_theta))
   
   rng = max(plt$gr_theta) - min(plt$gr_theta)
   rng = c(min(plt$gr_theta)-.5*rng/nbins,
@@ -407,7 +476,7 @@ print.prms = function(x, ...){
               'Method: ', x$inputs$method, ', ',
               ifelse(x$inputs$method == 'CML',
                      paste0('converged in ',x$est$n_iter, ' iterations'),
-                     paste0('number of Gibbs samples: ',nrow(x$est$beta.cml))),
+                     paste0('number of Gibbs samples: ',nrow(x$est$beta))),
               '\nitems: ', nrow(x$inputs$ssI), 
               '\nresponses: ', sum(x$inputs$ssIS$sufI),'\n\n',
               'Use coef() or coefficients() to extract the item parameters.\n')
@@ -421,23 +490,24 @@ print.prms = function(x, ...){
 #' extract enorm item parameters
 #' 
 #' @param object an enorm parameters object, generated by the function \code{\link{fit_enorm}}
-#' @param ... further arguments to coef, the following are currently supported;
-#' \describe{
-#'  \item{bayes_hpd_b}{width of Bayesian highest posterior density interval around mean_beta, 
-#'  value must be between 0 and 1, default is 0.95 }  
-#' }
-#' 
+#' @param bayes_hpd_b width of Bayesian highest posterior density interval around mean_beta, 
+#'  value must be between 0 and 1, default is 0.95 
+#' @param ... further arguments to coef are ignored
+#'  
 #' @return 
 #' Depends on the calibration method:
 #' \describe{
-#' \item{for CML}{a data.frame with columns: item_id, item_score, beta, SE_b}
+#' \item{for CML}{a data.frame with columns: item_id, item_score, beta, SE_beta}
 #' \item{for Bayes}{a data.frame with columns: item_id, item_score, mean_beta, SD_beta, -bayes_hpd_b_left-, -bayes_hpd_b_right-}
 #' }
-coef.prms = function(object, ...)
+#' 
+#' 
+#' 
+coef.prms = function(object, bayes_hpd_b = 0.95, ...)
 {
-  args = modifyList(list(...), list(bayes_hpd_b = 0.95))
+
   
-  if(args$bayes_hpd_b <= 0 ||  args$bayes_hpd_b >= 1)
+  if(bayes_hpd_b <= 0 ||  bayes_hpd_b >= 1)
     stop('args$bayes_hpd_b must be between 0 and 1')
   
   x = object
@@ -456,26 +526,171 @@ coef.prms = function(object, ...)
   if (x$inputs$method=="CML")
   {
     atab=data.frame(item_id=x$inputs$ssIS$item_id[-x$inputs$ssI$first],
-                    a=as.integer(x$inputs$ssIS$item_score[-x$inputs$ssI$first]),
-                    B=x$est$beta.cml,
-                    se=sqrt(diag(x$est$acov.cml)),stringsAsFactors=FALSE)
-    colnames(atab)=c("item_id" ,"item_score", "beta", "SE_b")
+                    item_score=as.integer(x$inputs$ssIS$item_score[-x$inputs$ssI$first]),
+                    beta=x$est$beta,
+                    SE_beta=sqrt(diag(x$est$acov.beta)),stringsAsFactors=FALSE)
   }
   
   if (x$inputs$method=="Bayes"){
-    hh = map_df(apply(x$est$beta.cml,2,hpd),c)
+    hh = map_df(apply(x$est$beta,2,hpd),c)
     atab=data.frame(item_id = x$inputs$ssIS$item_id[-x$inputs$ssI$first],
                     a = x$inputs$ssIS$item_score[-x$inputs$ssI$first],
-                    mb = colMeans(x$est$beta.cml),
-                    sdb = apply(x$est$beta.cml, 2, sd),
+                    mb = colMeans(x$est$beta),
+                    sdb = apply(x$est$beta, 2, sd),
                     hpdl = hh[,1], hpdr=hh[,2],stringsAsFactors=FALSE)
     colnames(atab)=c("item_id" ,"item_score", "mean_beta", "SD_beta", 
-                     sprintf("%i_hpd_b_left", round(100 * args$bayes_hpd_b)),
-                     sprintf("%i_hpd_b_right", round(100 * args$bayes_hpd_b)))
+                     sprintf("%i_hpd_b_left", round(100 * bayes_hpd_b)),
+                     sprintf("%i_hpd_b_right", round(100 * bayes_hpd_b)))
   }
   rownames(atab) = NULL
   return(atab)
 }
 
 
+#' Functions of theta
+#' 
+#' returns information function or expected score function for a single item, an arbitrary group of items or all items
+#' 
+#' @param parms object produced by fit_enorm
+#' @param items vector of one or more item_id's. If NULL and booklet_id is also NULL, all items in parms are used
+#' @param booklet_id id of a single booklet (e.g. the test information function), if items is not NULL this is ignored
+#' @param which.draw the number of the random draw (only applicable if calibration method was Bayes). If NULL, the mean 
+#' beta parameter will be used
+#' 
+#' @return a function which accepts a vector of theta's and returns an equal length vector 
+#' with the information estimate or the expected score
+#' 
+#' @examples
+#' 
+#' db = start_new_project(verbAggrRules,':memory:')
+#' add_booklet(db,verbAggrData, "agg")
+#' p = fit_enorm(db)
+#' 
+#' # plot information function for single item
+#' 
+#' ifun = information(p, "S1DoScold")
+#' 
+#' plot(ifun,from=-4,to=4)
+#' 
+#' # compare test information function to the population ability distribution
+#' 
+#' ifun = information(p, booklet="agg")
+#' 
+#' pv = plausible_values(db,p)
+#' 
+#' op = par(no.readonly=TRUE)
+#' par(mar = c(5,4,2,4))
+#' 
+#' plot(ifun,from=-4,to=4, xlab='theta', ylab='test information')
+#' 
+#' par(new=TRUE)
+#' 
+#' plot(density(pv$PV1), col='green', axes=FALSE,xlab=NA, ylab=NA,main=NA)
+#' axis(side=4)
+#' mtext(side = 4, line = 2.5, 'population density (green)')
+#' 
+#' par(op)
+#' close_project(db)
+#' 
+information = function(parms, items=NULL, booklet_id=NULL, which.draw=NULL)
+{
+  theta_function(parms, items=items, booklet=booklet_id, which.draw=which.draw, what='information')
+}
+
+#' @rdname information
+expected_score = function(parms, items=NULL, booklet_id=NULL, which.draw=NULL)
+{
+  theta_function(parms, items=items, booklet=booklet_id, which.draw=which.draw, what='expected')
+}
+# TO DO: should be able to accept a data.frame as wel as parms in the future
+# escore can be more efficient with the main loop in C
+theta_function = function(parms, items=NULL, booklet=NULL, which.draw=NULL, what=c('information','expected'))
+{
+  what = match.arg(what)
+  if(is.null(items) && is.null(booklet))
+  {
+    fl = parms$inputs$ssI
+  } else if(!is.null(items))
+  {
+    items = unique(items)
+    
+    if(length(setdiff(items,parms$inputs$ssI$item_id))>0)
+    {
+      message('unknown items:')
+      print(sort(setdiff(items,parms$inputs$ssI$item_id)))
+      stop('Some items were not found, see output')
+    }
+    
+    fl = parms$inputs$ssI %>% 
+      semi_join(tibble(item_id=items),by='item_id') %>% 
+      arrange(.data$first)
+    
+  } else
+  {
+    booklet = as.character(booklet)
+    check_arg(booklet,'character',.length=1)
+    
+    fl = parms$inputs$design %>%
+      filter(.data$booklet_id==booklet) %>%
+      inner_join(parms$inputs$ssI, by='item_id') %>%
+      arrange(.data$first)
+    if(nrow(fl)==0)
+      stop(paste0('booklet `',booklet,'` not found'))
+  }
+  
+  if(is.matrix(parms$est$b))
+  {
+    if(is.null(which.draw))
+    {
+      parms$est$b = colMeans(parms$est$b)
+    } else
+    {
+      if(which.draw<1 || which.draw > nrow(parms$est$b))
+        stop('parameter `which.draw` out of range')
+      parms$est$b = as.vector(parms$est$b[which.draw,])
+    }
+  }
+  if(what=='information')
+  {
+    out = function(theta)
+    {
+      check_arg(theta,'numeric')
+      if(any(is.na(theta) | is.nan(theta)))
+        stop('theta may not contain nan/NA values')  
+      
+      res = rep(0,length(theta))
+      res[is.finite(theta)] = 
+        IJ_(parms$est$b,parms$inputs$ssIS$item_score,fl$first, fl$last, theta[is.finite(theta)])$I
+      # extremely large values overflow to NaN, recover as 0
+      res[is.nan(res)] = 0
+      res
+    }
+    class(out) = append('inf_func',class(out))
+    
+  } else if(what=='expected')
+  {
+    max_score = sum(parms$inputs$ssIS$item_score[fl$last])
+    out = function(theta)
+    {
+      check_arg(theta,'numeric')
+      if(any(is.na(theta) | is.nan(theta))) 
+        stop('theta may not contain nan/NA values') 
+      
+      res = rep(0,length(theta))
+      
+      res[is.finite(theta)] =
+        sapply(theta[is.finite(theta)], E_score, b=parms$est$b, a=parms$inputs$ssIS$item_score, first=fl$first, last=fl$last)
+      
+      res[is.infinite(theta) & theta > 0] = max_score
+      # extremely large values of theta overflow to NaN (small values undeflow to zero, which is fine)
+      res[is.nan(res)] = max_score
+      res
+    }
+    class(out) = append('exp_func',class(out))
+  }
+  out
+}
+
+print.inf_func = function(x,...) cat('Information function I(theta)\n')
+print.exp_func = function(x,...) cat('Expected score function E(theta)\n')
 

@@ -11,7 +11,7 @@ get_item_properties(db)
 or \code{open_project}}
 }
 \value{
-A tibble with columns: item_property, type and values. Values shows 
+A tibble with columns: item_property, type and values. Values shows
 unique values for your item properties, cut off if there are many.
 }
 \description{

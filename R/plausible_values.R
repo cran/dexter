@@ -20,10 +20,7 @@
 #' @param nPV Number of plausible values to draw per person.
 #' @param use_draw When the ENORM was fitted with a Gibbs sampler (this is 
 #' recognised automatically), the number of the random draw (iteration) to use 
-#' in generating the PV. If NULL, all draws will be averaged; that is, the posterior means are used for the item parameters.
-#' If outside range, the last iteration will be used.
-#' @param asOPLM As a courtesy to the OPLM user, this option normalizes the item parameter as in OPLM output. 
-#' Is inactive when there are fixed pameters because their values determine the normalization.
+#' in generating the PV. If NULL, all draws will be averaged; that is, the posterior means are used for the item parameters. If outside range, the last iteration will be used.
 #' @return A data.frame with columns booklet_id, person_id, sumScore and nPV plausible values
 #' named PV1...PVn.
 #' 
@@ -60,16 +57,18 @@
 #'    
 #' close_project(db)    
 #' 
-plausible_values = function(dataSrc, parms=NULL, predicate=NULL, covariates=NULL, nPV=1, use_draw=NULL, asOPLM=TRUE)
+plausible_values = function(dataSrc, parms=NULL, predicate=NULL, covariates=NULL, nPV=1, use_draw=NULL)
 {
   qtpredicate = eval(substitute(quote(predicate)))
+  env=caller_env()
   plausible_values_(dataSrc, parms, qtpredicate=qtpredicate, covariates=covariates, nPV=nPV, 
-                    use_draw=use_draw, asOPLM=asOPLM, env=caller_env()) %>%
+                    use_draw=use_draw, env=env) %>%
     as.data.frame()
 }
 
 # use_b_matrix makes the function act as if parms=null when parms is actually bayesian
-plausible_values_ = function(dataSrc, parms=NULL, qtpredicate=NULL, covariates=NULL, nPV=1, use_draw=NULL, env=NULL, use_b_matrix=FALSE, asOPLM)
+plausible_values_ = function(dataSrc, parms=NULL, qtpredicate=NULL, covariates=NULL, nPV=1, use_draw=NULL, 
+                             env=NULL, use_b_matrix=FALSE)
 {
   if(is.null(env)) env = caller_env()
   from = 20 ; by = 5
@@ -95,21 +94,6 @@ plausible_values_ = function(dataSrc, parms=NULL, qtpredicate=NULL, covariates=N
     arrange(.data$booklet_id, .data$first)
   
   if(any(is.na(design$first))) stop('Some of your items are without parameters')
-  
-  ### Normalize as in OPLM
-  if (asOPLM && !parms$inputs$has_fixed_parms)
-  {
-    ff = toOPLM(parms$inputs$ssIS$item_score, parms$est$b, parms$inputs$ssI$first, parms$inputs$ssI$last)
-    if (parms$inputs$method=="CML"){
-      parms$est$b = toDexter(parms$est$beta.cml, ff$a, ff$first, ff$last, re_normalize = FALSE)$est$b
-    }else
-    {
-      for (i in 1:nrow(parms$est$b))
-      {
-        parms$est$b[i,] = toDexter(parms$est$beta.cml[i,], ff$a, ff$first, ff$last, re_normalize = FALSE)$est$b
-      }
-    }
-  }
   
   if (parms_given && !use_b_matrix)
   {

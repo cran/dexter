@@ -5,7 +5,7 @@
 \title{Draw plausible values}
 \usage{
 plausible_values(dataSrc, parms = NULL, predicate = NULL,
-  covariates = NULL, nPV = 1, use_draw = NULL, asOPLM = TRUE)
+  covariates = NULL, nPV = 1, use_draw = NULL)
 }
 \arguments{
 \item{dataSrc}{Data source: a dexter project db handle or a data.frame with columns: person_id, item_id, item_score}
@@ -27,11 +27,7 @@ If dataSrc is a data.frame, it must contain the covariate.}
 
 \item{use_draw}{When the ENORM was fitted with a Gibbs sampler (this is 
 recognised automatically), the number of the random draw (iteration) to use 
-in generating the PV. If NULL, all draws will be averaged; that is, the posterior means are used for the item parameters.
-If outside range, the last iteration will be used.}
-
-\item{asOPLM}{As a courtesy to the OPLM user, this option normalizes the item parameter as in OPLM output. 
-Is inactive when there are fixed pameters because their values determine the normalization.}
+in generating the PV. If NULL, all draws will be averaged; that is, the posterior means are used for the item parameters. If outside range, the last iteration will be used.}
 }
 \value{
 A data.frame with columns booklet_id, person_id, sumScore and nPV plausible values

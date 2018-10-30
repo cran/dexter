@@ -22,12 +22,12 @@ item-category parameters in the regular parameterization used e.g., by OPLM.
 Exploratory test for Differential Item Functioning
 }
 \details{
-Tests for equality of relative item difficulties category locations across groups.
+Tests for equality of relative item/category difficulties across groups.
 Supplements the confirmatory approach of the profile plot
 }
 \examples{
 \dontrun{
-db = start_new_project(verbAggrRules, "verbAggression.db", person_propertys=list(gender='unknown'))
+db = start_new_project(verbAggrRules, "verbAggression.db", person_properties=list(gender='unknown'))
 add_booklet(db, verbAggrData, "agg")
 dd = DIF(db,person_property="gender")
 print(dd)

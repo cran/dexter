@@ -1,7 +1,7 @@
 Package: dexter
 Type: Package
 Title: Data Management and Analysis of Tests
-Version: 0.8.1
+Version: 0.8.2
 Author: Gunter Maris, Timo Bechger, Jesse Koops, Ivailo Partchev
 Maintainer: Ivailo Partchev <partchev@gmail.com>
 Description: A system for the management, assessment, and psychometric analysis of data from educational and psychological tests. 
@@ -22,6 +22,6 @@ Suggests: knitr, rmarkdown, latticeExtra, testthat, calibrate, ggplot2,
         Cairo
 VignetteBuilder: knitr
 NeedsCompilation: yes
-Packaged: 2018-08-20 09:07:51 UTC; ivailo
+Packaged: 2018-10-24 22:19:51 UTC; ivailo
 Repository: CRAN
-Date/Publication: 2018-08-20 09:50:06 UTC
+Date/Publication: 2018-10-30 11:30:15 UTC

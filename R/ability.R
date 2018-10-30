@@ -24,7 +24,6 @@
 #' @param mu Mean of the normal prior
 #' @param sigma Standard deviation of the normal prior
 #' @param standard_errors If true standard-errors are produced.
-#' @param asOPLM Report abilities on a scale defined by the OPLM normalization. Only when no values in parms have been fixed
 #' 
 #' @return 
 #' \describe{
@@ -54,8 +53,9 @@
 #' }
 #' 
 #' 
-ability = function(dataSrc, parms, predicate=NULL, method=c("MLE","EAP"), prior=c("normal", "Jeffreys"), use_draw=NULL, 
-                    npv=500, mu=0, sigma=4, standard_errors=FALSE,  asOPLM=TRUE){
+ability = function(dataSrc, parms, predicate=NULL, method=c("MLE","EAP"), prior=c("normal", "Jeffreys"), 
+                   use_draw=NULL, npv=500, mu=0, sigma=4, standard_errors=FALSE)
+{
 
   check_arg(dataSrc, 'dataSrc')
   check_arg(parms, 'prms')
@@ -63,8 +63,8 @@ ability = function(dataSrc, parms, predicate=NULL, method=c("MLE","EAP"), prior=
   method <- match.arg(method)
   prior = match.arg(prior) 
   qtpredicate = eval(substitute(quote(predicate)))
-  
-  respData = get_resp_data(dataSrc, qtpredicate, summarised=FALSE, env=caller_env())
+  env = caller_env()
+  respData = get_resp_data(dataSrc, qtpredicate, summarised=FALSE, env=env)
   
   if(nrow(respData$x)==0) stop('no data to analyse')
   
@@ -81,7 +81,7 @@ ability = function(dataSrc, parms, predicate=NULL, method=c("MLE","EAP"), prior=
   respData = get_resp_data(respData, summarised = TRUE)
 
   abl = ability_tables(parms=parms, design = respData$design, method = method, prior=prior, use_draw = use_draw, 
-                       npv=npv, mu=mu, sigma=sigma, standard_errors=standard_errors, asOPLM=asOPLM)
+                       npv=npv, mu=mu, sigma=sigma, standard_errors=standard_errors)
   
   return(respData$x %>% 
            inner_join(abl, by = c("booklet_id", "sumScore")) %>% 
@@ -92,8 +92,7 @@ ability = function(dataSrc, parms, predicate=NULL, method=c("MLE","EAP"), prior=
 
 
 #' @rdname ability
-ability_tables = function(parms, design = NULL, method = c("MLE","EAP"), prior=c("normal", "Jeffreys"), use_draw = NULL, 
-                          npv=500, mu=0, sigma=4, standard_errors = TRUE, asOPLM=TRUE) #smooth=FALSE,
+ability_tables = function(parms, design = NULL, method = c("MLE","EAP"), prior=c("normal", "Jeffreys"), use_draw = NULL, npv=500, mu=0, sigma=4, standard_errors = TRUE) #smooth=FALSE,
 {
 
   method = match.arg(method)
@@ -105,23 +104,8 @@ ability_tables = function(parms, design = NULL, method = c("MLE","EAP"), prior=c
     check_arg(mu, 'numeric', .length=1)
     check_arg(sigma, 'numeric', .length=1)
   }
-  check_arg(asOPLM, 'logical', .length=1)
   check_arg(standard_errors, 'logical', .length=1)
   check_arg(use_draw, 'integer', .length=1, nullable=TRUE)
-  
-  if (asOPLM && !parms$inputs$has_fixed_parms)
-  {
-    ff = toOPLM(parms$inputs$ssIS$item_score, parms$est$b, parms$inputs$ssI$first, parms$inputs$ssI$last)
-    if (parms$inputs$method=="CML"){
-      parms$est$b = toDexter(parms$est$beta.cml, ff$a, ff$first, ff$last, re_normalize = FALSE)$est$b
-    }else
-    {
-      for (i in 1:nrow(parms$est$b))
-      {
-        parms$est$b[i,] = toDexter(parms$est$beta.cml[i,], ff$a, ff$first, ff$last, re_normalize = FALSE)$est$b
-      }
-    }
-  }
   
   ## Check validity of input
   if (method=="EAP")
@@ -180,9 +164,10 @@ ability_tables = function(parms, design = NULL, method = c("MLE","EAP"), prior=c
   # add b to ssIS
   parms$inputs$ssIS$b = b
   estimate = switch(method, 
-                    'MLE'  = function(.){ theta_MLE(b, a, .$first, .$last, se=standard_errors) }, 
-                    'EAP'  = function(.){ theta_EAP(b, a, .$first, .$last, npv=npv, mu=mu, sigma=sigma, se=standard_errors) }, 
-                    'jEAP' = function(.){ theta_jEAP(b, a, .$first, .$last, se=standard_errors) })
+                'MLE'  = function(.){ theta_MLE(b, a, .$first, .$last, se=standard_errors) }, 
+                'EAP'  = function(.){ theta_EAP(b, a, .$first, .$last, npv=npv, mu=mu, sigma=sigma, 
+                                                se=standard_errors) }, 
+                'jEAP' = function(.){ theta_jEAP(b, a, .$first, .$last, se=standard_errors) })
   
   # under the assumption that we always get theta's for the vector 0:max_test_score 
   design %>% 
@@ -211,23 +196,10 @@ ability_tables = function(parms, design = NULL, method = c("MLE","EAP"), prior=c
 
 ## Experimental: produces for unweighted scores
 theta_tables = function(parms, design = NULL, method = c("MLE","EAP"), use_draw = NULL, 
-                        npv=500, mu=0, sigma=4, asOPLM=TRUE) 
+                        npv=500, mu=0, sigma=4) 
 {
   method = match.arg(method)
-  if ((asOPLM)&(!parms$inputs$has_fixed_parms))
-  {
-    ff = toOPLM(parms$inputs$ssIS$item_score, parms$est$b, parms$inputs$ssI$first, parms$inputs$ssI$last)
-    if (parms$inputs$method=="CML"){
-      parms$est$b = toDexter(parms$est$beta.cml, ff$a, ff$first, ff$last, re_normalize = FALSE)$est$b
-    }else
-    {
-      for (i in 1:nrow(parms$est$b))
-      {
-        parms$est$b[i,] = toDexter(parms$est$beta.cml[i,], ff$a, ff$first, ff$last, re_normalize = FALSE)$est$b
-      }
-    }
-  }
-  
+ 
   if(is.null(design))
   {
     design = lapply(parms$inputs$bkList, function(bk) tibble(booklet_id=bk$booklet,item_id=bk$items)) %>% bind_rows()
@@ -264,8 +236,8 @@ theta_tables = function(parms, design = NULL, method = c("MLE","EAP"), use_draw 
   parms$inputs$ssIS$b = b
   A = unlist(lapply(parms$inputs$ssI$nCat, function(x)c(0:(x-1))),use.names = F) ## a for unweighted scores
   estimate = switch(method, 
-                    'MLE'  = function(.){ theta_aA(b, a, A, .$first, .$last) }, 
-                    'EAP'  = function(.){ theta_EAP(b, a, .$first, .$last, npv=npv, mu=mu, sigma=sigma, se=TRUE, A) })
+                'MLE'  = function(.){ theta_aA(b, a, A, .$first, .$last) }, 
+                'EAP'  = function(.){ theta_EAP(b, a, .$first, .$last, npv=npv, mu=mu, sigma=sigma, se=TRUE, A) })
  
   # under the assumption that we always get theta's for the vector 0:max_test_score 
   design %>% 

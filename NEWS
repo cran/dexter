@@ -1,3 +1,13 @@
+# dexter 0.8.2
+
+* added functions `information()` and `expected_score()` for tests and items in the ENORM.
+* change in the algorithm for MLE estimation method in ability and ability_tables. The new algorithm is
+  more precise so small changes in (the lower digits of) computed theta values may occur with respect 
+  to previous versions of dexter.
+* corrected a bug in the reporting of standard errors for Bayesian estimation of the ENORM. The
+  SE's reported in previous versions of dexter were to high.
+
+
 # dexter 0.8.1
 
 * significant speed increases in plausible_values, plausible_scores, ability and ability_tables

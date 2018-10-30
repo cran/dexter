@@ -62,25 +62,30 @@ void sampleNRM(double *theta, double *b, int *a, int *i, int *first, int *last, 
 }
 
 // sample test-scores: This routine is adapted for use with b_0 and a_0.
-void sampleNRM2(double *theta, double *b, int *a, int *first, int *last, int *nI, int *m, int *score)
+void sampleNRM2(double *theta, double *b, int *a, int *first, int *last, int *nI_, int *m_,  int *maxA_, int *score)
 {
-  double *p=NULL, u;
-  int k=0,maxS=0;
-  GetRNGstate(); // get seed
-  for (int i=0;i<nI[0];i++) {if ((last[i]-first[i]+2)>maxS) {maxS=(last[i]-first[i]+2);}}
-  void *_p = realloc(p, ((maxS+1) * sizeof(double)));
-  p=(double*)_p;
+
+  double u;
+  int maxA = *maxA_, m = *m_, nI = *nI_;
+  int k=0;
+  double p[maxA+3];
+  double lookup[maxA+1];
   
-  for (int pers=0;pers<m[0];pers++)
+  GetRNGstate(); // get seed
+  
+  lookup[0] = 1.0;
+
+  for (int pers=0;pers<m;pers++)
   {
     score[pers]=0;
-    for (int i=0;i<nI[0];i++)
+	for(int i=1;i<=maxA;i++){ lookup[i] = exp(i*theta[pers]);}
+    for (int i=0;i<nI;i++)
     {
-      p[0]=b[first[i]]*exp(a[first[i]]*theta[pers]); 
+      p[0]=b[first[i]]; //*exp(a[first[i]]*theta[pers]); 
       k=1;
       for (int j=first[i]+1;j<=last[i];j++) // note the +1
       {
-        p[k]=p[k-1]+b[j]*exp(a[j]*theta[pers]);
+        p[k]=p[k-1]+b[j]*lookup[a[j]];
         k++;
       }
       u=p[k-1]*runif(0,1);
@@ -90,8 +95,8 @@ void sampleNRM2(double *theta, double *b, int *a, int *first, int *last, int *nI
     }
   }
   PutRNGstate(); // put seed
-  free(p);
 }
+
 
 void PV0(double *b, int *a, int *first, int *last, double *mu, double *sigma, int *score, int *pop, int *nP,int *nI, int *nPop, double *theta)
 {
@@ -264,12 +269,12 @@ void PVrecycle(double *b, int *a, int *first, int *last, double *mu, double *sig
         while (u>p[k]) {k++;}
         if (k>0) {x+=a[first[i]+k];} // note that -1 has been deleted
     }
-	  if(scoretb[x] > 0)
-	  {
+	if(scoretb[x] > 0)
+	{
 		  theta[cscoretb[x] - scoretb[x]] = atheta;
 		  scoretb[x]--;
 		  nP--;
-	  }
+	}
   }
   PutRNGstate(); // put seed
 }
@@ -504,94 +509,97 @@ void Escore(double *theta, double *score, double *b, int *a, int *first, int *la
 }
 
 
-void theta_mle_c(double *theta, double *b, int *a, int *first, int *last, int *n_, int *max_score_, int *max_a_)
+// slightly faster version with maxa
+void Escore_ma(double *theta, double *score, double *b, int *a, int *first, int *last, int *n, int *max_a_)
 {
-	int max_a = *max_a_;
-	int n = *n_;
-	int max_score = *max_score_;
-	double score;
-	double denom, num;
-	double lookup[max_a+1];
+  int max_a = *max_a_;
+  double denom, num;
+  double lookup[max_a+1];
 
-	lookup[0] = 1.0;
-		
-	for(int s=1;s<max_score;s++)
-	{
-		score = -1.0;
-		while(fabs(score-s)>.1)
-		{
-			score = 0.0;
-			for(int i=1; i <= max_a; i++)
-			{
-				lookup[i] = exp(i*theta[s-1]);
-			}
-			for (int i=0; i<n; i++)
-			{
-				num=0.0;
-				denom=1.0;
-				for (int j=first[i]+1;j<=last[i];j++) // note +1
-				{
-				  num  +=a[j]*b[j]*lookup[a[j]];
-				  denom+=     b[j]*lookup[a[j]];
-				}
-				score += num/denom;
-			}
-			theta[s-1] += log(s/score) /2.0; // /2 prevents getting stuck by continuously overshooting
-		}
-	}
-
+  lookup[0] = 1.0;
+  
+  score[0]=0.0;
+  for(int i=1; i <= max_a; i++)
+  {
+    lookup[i] = exp(i*theta[0]);
+  }
+  
+  for (int i=0; i<n[0]; i++)
+  {
+    num=0.0;
+    denom=1.0;
+    for (int j=first[i]+1;j<=last[i];j++) // note +1
+    {
+      num    +=a[j]*b[j]*lookup[a[j]];
+	  denom  +=     b[j]*lookup[a[j]];
+    }
+    score[0]+=num/denom;
+  }
 }
 
+// Method of False Position used to find MLE of theta 
 
-
-/*
-void IJ_c(double *theta, double *b, int *a, int *first, int *last, double *I, double *J,  double *logFi, int *nI, int *nT, int *max_ncat)
+void theta_mle_fp(double *theta, double *b, int *a, int *first, int *last, int *n, int *max_score_, int *max_a)
 {
-	
-	int len_T = *nT;
-	int len_I = *nI;
-	double Fij[max_ncat[0]][len_T];
-	double M,M1,M2,M3,colsm;	
 
-	
+  int max_iterFP = 200;
+  double l, u, m; /* lower, upper, new(middle) theta  */
+  double fl, fu, fm; /* Expected score at theta equal to l,u, and m */
+  double max_u, max_fu;
+  int iter;
+  int max_score = *max_score_;
 
-	for(int i=0;i<len_T;i++) logFi[i] = 0.0;
-	
-	for(int i=0;i<len_I;i++)
-	{
-		for(int j = first[i]; j<=last[i]; j++)
-		{
-			for(int k=0;k<len_T;k++)
-			{				
-				Fij[j-first[i]][k] = b[j] * exp(a[j] * theta[k]);
-			}
-		}
+  // find bounds around testscore [1,max-1]
+  l = -3.0;
+  Escore_ma(&l, &fl, b, a, first, last, n, max_a);    
+  while(fl>1)
+  {
+    l -= 1;
+	Escore_ma(&l, &fl, b, a, first, last, n, max_a);  
+  }
+  
+  u = 3;
+  Escore_ma(&u, &fu, b, a, first, last, n, max_a);
+  while(fu < max_score-1)
+  {
+	  u += 1;
+	  Escore_ma(&u, &fu, b, a, first, last, n, max_a);
+  }
+  max_u = u;
+  max_fu = fu; 
 
-		for(int j=0;j<len_T;j++)
-		{
-			colsm = 0.0;	
-			for(int q=0;q<=last[i] - first[i];q++)
-			{
-				colsm  += Fij[q][j];
-			}
-			logFi[j] += log(colsm);
-			
-			M1=0;M2=0;M3=0;
-			for(int k=first[i]; k<=last[i];k++)
-			{
-				M = Fij[k-first[i]][j]/colsm;	
-				M1 += a[k] * M;
-				M2 += pow(a[k],2) * M;
-				M3 += pow(a[k],3) * M;			
-			}
-			
-			I[j*len_I+i] = M2 - pow(M1,2);
-			J[j*len_I+i] = M3 - 3*M1*M2 + 2*pow(M1,3);
-		}
-
-	} 
+  // estimate using regula falsi
+  for(int s=1; s<max_score; s++)
+  {
+    // reset upper bound, lower bound is kept
+	u = max_u;
+	fu = max_fu;
+    iter = 1;
+    while ( (fabs(l-u)>0.001) && (iter <= max_iterFP) )
+    {
+      fl = s - fl; fu = s - fu;
+      m = (l*fu-u*fl)/(fu-fl);
+      Escore_ma(&m, &fm, b,a, first, last, n, max_a);  
+    
+      if (fm < s) 
+	    {
+        l = m;
+		    fl = fm;
+		    fu = s - fu; //revert s-fu
+      }else 
+      {
+		    u = m;
+		    fu = fm;
+		    fl = s - fl; // revert s-fl
+      }
+	    iter++;
+    }
+    theta[s-1] = m;
+	l = m;
+	fl = fm;
+  }
 }
-*/
+
 
 void IJ_c(double *theta, double *b, int *a, int *first, int *last, double *I, double *J,  double *logFi, int *nI, int *nT, int *max_ncat)
 {

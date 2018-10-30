@@ -16,7 +16,8 @@ for a new sqlite database to be created. If this name does not
 contain a path, the file will be created in the work
 directory. Any existing file with the same name will be overwritten.}
 
-\item{person_properties}{An optional list of person properties. Names should correspond to person_properties intended to be used in the project.
+\item{person_properties}{An optional list of person properties. Names should correspond to person_properties 
+intended to be used in the project.
 Values are used as default (missing) values. The datatype will also be inferred from the values.
 Known person_properties will be automatically imported when adding response data with \code{\link{add_booklet}}.}
 

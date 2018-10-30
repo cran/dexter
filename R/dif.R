@@ -1,27 +1,28 @@
 
 
 ## produces a matrix of statistics for pairwise DIF
-PairDIF_ <- function(par1,par2,cov1,cov2)
+PairDIF_ <- function(beta1,beta2,acov.beta1,acov.beta2)
 {
-  labs=rownames(par1)
-  D=kronecker(par2,t(par2),FUN="-")-kronecker(par1,t(par1),FUN="-") 
-  var1=diag(cov1)
-  var2=diag(cov2)
-  S=(kronecker(var1,t(var1),FUN="+")-2*cov1)+(kronecker(var2,t(var2),FUN="+")-2*cov2)
+  labs=rownames(beta1)
+  DR=kronecker(beta2,t(beta2),FUN="-")-kronecker(beta1,t(beta1),FUN="-") 
+  var1=diag(acov.beta1)
+  var2=diag(acov.beta2)
+  S=(kronecker(var1,t(var1),FUN="+")-2*acov.beta1)+(kronecker(var2,t(var2),FUN="+")-2*acov.beta2)
   diag(S)=1
-  D=D/sqrt(S)
+  D=DR/sqrt(S)
   colnames(D)=labs; rownames(D)=labs
-  return(D)
+  colnames(DR)=labs; rownames(DR)=labs
+  return(list(D=D, Delta_R=DR))
 }
 
 ## produces a statistics for overall-DIF
-OverallDIF_ <- function(par1,par2, cov1,cov2)
+OverallDIF_ <- function(beta1,beta2, acov1,acov2)
 {
   r=1
-  nI=length(par1)
-  beta=par1-par2
-  Sigma=cov1+cov2
-  DIF_test=mahalanobis(beta[-r],rep(0,(nI-1)),Sigma[-r,-r])
+  nI=length(beta1)
+  d_beta=beta1-beta2
+  Sigma=acov1+acov2
+  DIF_test=mahalanobis(d_beta[-r],rep(0,(nI-1)),Sigma[-r,-r])
   DIF_p=pchisq(DIF_test,(nI-1),lower.tail=FALSE)
   return(list(stat=DIF_test,df=nI-1, p=DIF_p))
 }
@@ -68,7 +69,7 @@ bty = function (n, h = c(265, 75), c. = c(61, 66),
 #' overall-DIF and a matrix of statistics for DIF in the relative position of
 #' item-category parameters in the regular parameterization used e.g., by OPLM.
 #' @details 
-#' Tests for equality of relative item difficulties category locations across groups.
+#' Tests for equality of relative item/category difficulties across groups.
 #' Supplements the confirmatory approach of the profile plot
 #' 
 #' @references 
@@ -77,7 +78,7 @@ bty = function (n, h = c(265, 75), c. = c(61, 66),
 #' 
 #' @examples
 #' \dontrun{
-#' db = start_new_project(verbAggrRules, "verbAggression.db", person_propertys=list(gender='unknown'))
+#' db = start_new_project(verbAggrRules, "verbAggression.db", person_properties=list(gender='unknown'))
 #' add_booklet(db, verbAggrData, "agg")
 #' dd = DIF(db,person_property="gender")
 #' print(dd)
@@ -97,8 +98,8 @@ DIF = function(dataSrc, person_property, predicate=NULL)
   }
   
   columns = c('person_id','item_id','item_score', person_property)
-  
-  respData = get_responses_(dataSrc, qtpredicate, columns = columns, env = caller_env()) 
+  env = caller_env()
+  respData = get_responses_(dataSrc, qtpredicate, columns = columns, env = env) 
   
   if(nrow(respData) == 0) stop('no data to analyse')
   
@@ -118,32 +119,27 @@ DIF = function(dataSrc, person_property, predicate=NULL)
   if(nrow(problems) > 0)
   {
     problems = tibble(item_id = unique(problems$item_id))
-    warning(paste('the following items do not have the same score categories over both person_propertys and',
+    warning(paste('the following items do not have the same score categories over both person_properties and',
                   'have been removed from the analysis:', paste0(problems$item_id,collapse=', ')))
     respData = lapply(respData, function(x) x %>% anti_join(problems, by = 'item_id'))
   }
 
   ## 2. Estimate models with fit_enorm using CML
   models = lapply(respData, fit_enorm)
-  #models = list(fit_enorm_(respData[[1]],env=as.environment(list())), 
-  #              fit_enorm_(respData[[2]],env=as.environment(list())))
-  
-
-
+ 
   ## 4. Call overallDIF_ and PairDIF_
-  DIF_stats = OverallDIF_ (models[[1]]$est$beta.cml, models[[2]]$est$beta.cml, 
-                           models[[1]]$est$acov.cml, models[[2]]$est$acov.cml)
+  DIF_stats = OverallDIF_ (models[[1]]$est$beta, models[[2]]$est$beta, 
+                           models[[1]]$est$acov.beta, models[[2]]$est$acov.beta)
   
-  D = PairDIF_(models[[1]]$est$beta.cml, models[[2]]$est$beta.cml, 
-               models[[1]]$est$acov.cml, models[[2]]$est$acov.cml)
+  DIF_mats = PairDIF_(models[[1]]$est$beta, models[[2]]$est$beta, 
+                      models[[1]]$est$acov.beta, models[[2]]$est$acov.beta)
   
-
   items = common_scores %>%
     filter(.data$item_score > 0) %>%
     arrange(.data$item_id, .data$item_score)
 
   ## 5. Report D and DIF_stats and inputs
-  ou = list(DIF_overall = DIF_stats, DIF_pair = D, 
+  ou = list(DIF_overall = DIF_stats, DIF_pair = DIF_mats$D, Delta_R = DIF_mats$Delta_R, 
             group_labels = names(respData), items = items)
   class(ou) = append('DIF_stats', class(ou))
   return(ou)
@@ -220,8 +216,9 @@ plot.DIF_stats = function(x, items = NULL, itemsX = items, itemsY = items, ...)
   ColorLevels <- seq(min(x$DIF_pair), max(x$DIF_pair), length=length(ColorRamp))
   
   # Reverse Y axis
-  yLabels <- rev(yLabels)
-  DIF_pair <- DIF_pair[nrow(DIF_pair) : 1,]
+  # yLabels <- rev(yLabels)
+   xLabels <- rev(xLabels)
+   DIF_pair <- DIF_pair[nrow(DIF_pair) : 1,]
   
   # Data Map
   oldpar = par(mar = c(6,8,2.5,2))
