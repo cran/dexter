@@ -75,13 +75,11 @@ Note that responses are always treated as strings (in both functions), and \code
 values are transformed to the string \code{"NA"}.
 }
 \examples{
-\dontrun{
-db = start_new_project(verbAggrRules, "verbAggression.db", 
+db = start_new_project(verbAggrRules, ":memory:", 
                        person_properties=list(gender="unknown"))
 head(verbAggrData)
 add_booklet(db, verbAggrData, "agg")      
 
 close_project(db)
-}
 
 }

@@ -1,7 +1,6 @@
 context('test interaction')
 
 library(dplyr)
-library(purrr)
 
 
 expect_no_error = function(object, info=NULL) expect_error(object, regexp=NA, info=info)

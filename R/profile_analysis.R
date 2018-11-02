@@ -51,7 +51,7 @@ profiles = function(dataSrc, parms, item_property, predicate=NULL)
     if(!item_property %in% colnames(dataSrc))
       stop(paste0('dataSrc should include a column `',item_property,'`'))
     
-    idom = distinct(dataSrc, .data$item_id, .data[[!item_property]])
+    idom = distinct(dataSrc, .data$item_id, .data[[item_property]])
     
     if(nrow(idom) > nrow(distinct(idom, .data$item_id)))
       stop('Each item may only have a single item property')
@@ -67,12 +67,12 @@ profiles = function(dataSrc, parms, item_property, predicate=NULL)
                            extra_columns = item_property, extra_design_columns = item_property)
   
   respData$x %>%
-    group_by(.data$person_id, .data$booklet_id, .data$sumScore, .data[[!!item_property]]) %>%
+    group_by(.data$person_id, .data$booklet_id, .data$sumScore, .data[[item_property]]) %>%
     summarise(domain_score = sum(.data$item_score)) %>%
     ungroup() %>%
     inner_join(
         profile_tables(parms = parms, design = respData$design, 
-                       domains=distinct(respData$design, .data$item_id, .data[[!!item_property]]),
+                       domains=distinct(respData$design, .data$item_id, .data[[item_property]]),
                        item_property = item_property),
         by = c('booklet_id','sumScore',item_property)) %>%
     as.data.frame()
@@ -115,9 +115,9 @@ profile_tables = function(parms, domains, item_property, design = NULL)
   design = design %>% 
     select(.data$booklet_id, .data$item_id) %>%
     inner_join(domains, by='item_id') %>%
-    mutate(dcat = dense_rank(.data[[!!item_property]]))
+    mutate(dcat = dense_rank(.data[[item_property]]))
   
-  dcat = distinct(design, .data[[!!item_property]], dcat )
+  dcat = distinct(design, .data[[item_property]], dcat )
   
     parms$inputs$ssI %>% 
       mutate(i = row_number()) %>%

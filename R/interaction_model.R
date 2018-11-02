@@ -171,13 +171,13 @@ fit_domains = function(dataSrc, item_property, predicate = NULL)
 
   # adapt the respdata object by making new polytomous items based on the domains
   respData$x = respData$x %>%
-    group_by(.data$person_id, .data[[!!item_property]]) %>%
+    group_by(.data$person_id, .data[[item_property]]) %>%
     summarise(item_score=sum(.data$item_score)) %>%
     ungroup() %>%
     group_by(.data$person_id) %>%
     mutate(sumScore = sum(.data$item_score)) %>%
     ungroup() %>%
-    rename(item_id = .data[[!!item_property]]) %>%
+    rename(item_id = .data[[item_property]]) %>%
     add_column(booklet_id='b')
 
   respData$design = tibble(booklet_id = 'b', item_id = unique(respData$x$item_id))

@@ -14,10 +14,10 @@ The order is not important but spelling is. Any other columns will be ignored.}
 \item{db}{A connection to an existing sqlite database or a string specifying a filename
 for a new sqlite database to be created. If this name does not
 contain a path, the file will be created in the work
-directory. Any existing file with the same name will be overwritten.}
+directory. Any existing file with the same name will be overwritten. For an in-memory database
+you can use the string \code{":memory:"}.}
 
-\item{person_properties}{An optional list of person properties. Names should correspond to person_properties 
-intended to be used in the project.
+\item{person_properties}{An optional list of person properties. Names should correspond to person_properties intended to be used in the project.
 Values are used as default (missing) values. The datatype will also be inferred from the values.
 Known person_properties will be automatically imported when adding response data with \code{\link{add_booklet}}.}
 
@@ -38,7 +38,7 @@ Responses may be integers or strings but they will always be treated as strings.
 Scores must be integers, and the minimum score for an item must be 0.
 When inputting data, all responses not specified in the rules can optionally be treated as
 missing and ultimately scored 0, but it is good style to include the missing
-responses in the list. NA values will be treated as the string 'NA'.
+responses in the list. NA values will be treated as the string "NA"'.
 }
 \examples{
 \donttest{

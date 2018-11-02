@@ -31,9 +31,9 @@ utils::globalVariables(c("."))
 #' @param db A connection to an existing sqlite database or a string specifying a filename
 #' for a new sqlite database to be created. If this name does not
 #' contain a path, the file will be created in the work
-#' directory. Any existing file with the same name will be overwritten.
-#' @param person_properties An optional list of person properties. Names should correspond to person_properties 
-#' intended to be used in the project.
+#' directory. Any existing file with the same name will be overwritten. For an in-memory database
+#' you can use the string \code{":memory:"}.
+#' @param person_properties An optional list of person properties. Names should correspond to person_properties intended to be used in the project.
 #' Values are used as default (missing) values. The datatype will also be inferred from the values.
 #' Known person_properties will be automatically imported when adding response data with \code{\link{add_booklet}}. 
 #' @param covariates Deprecated alias for person_properties.
@@ -46,7 +46,7 @@ utils::globalVariables(c("."))
 #' Scores must be integers, and the minimum score for an item must be 0.
 #' When inputting data, all responses not specified in the rules can optionally be treated as
 #' missing and ultimately scored 0, but it is good style to include the missing
-#' responses in the list. NA values will be treated as the string 'NA'.
+#' responses in the list. NA values will be treated as the string "NA"'.
 #'
 #' @examples
 #'\donttest{
@@ -378,14 +378,12 @@ touch_rules = function(db, rules)
 #' values are transformed to the string \code{"NA"}.
 #' 
 #' @examples 
-#' \dontrun{
-#' db = start_new_project(verbAggrRules, "verbAggression.db", 
+#' db = start_new_project(verbAggrRules, ":memory:", 
 #'                        person_properties=list(gender="unknown"))
 #' head(verbAggrData)
 #' add_booklet(db, verbAggrData, "agg")      
 #' 
 #' close_project(db)
-#' }
 #' 
 add_booklet = function(db, x, booklet_id, auto_add_unknown_rules = FALSE) {
   
@@ -518,6 +516,7 @@ add_response_data = function(db, data, auto_add_unknown_rules = FALSE, missing_v
   }
   dbTransaction(db,{ 
   
+    
     user_booklets = distinct(data, .data$booklet_id)
     
     known_booklets = user_booklets %>%
@@ -525,7 +524,7 @@ add_response_data = function(db, data, auto_add_unknown_rules = FALSE, missing_v
     
     unknown_booklets = anti_join(user_booklets, known_booklets, by='booklet_id')
     
-    if (nrow(unknown_booklets) > 0)
+    if(nrow(unknown_booklets) > 0)
     {
       dbExecute(db,'INSERT INTO dxBooklets(booklet_id) VALUES(:booklet_id);',unknown_booklets)
       if('item_position' %in% colnames(data))
@@ -839,6 +838,10 @@ get_item_properties = function(db) {
   }
 }
 
+
+
+
+
 #' Person properties in a project
 #'
 #' Quickly glimpse the person properties defined in the project (if any).
@@ -868,6 +871,8 @@ get_person_properties = function(db) {
       as.data.frame()
   }
 }
+
+
 
 #' Items in a project
 #'

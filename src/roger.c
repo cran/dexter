@@ -562,8 +562,8 @@ void theta_mle_fp(double *theta, double *b, int *a, int *first, int *last, int *
   Escore_ma(&u, &fu, b, a, first, last, n, max_a);
   while(fu < max_score-1)
   {
-	  u += 1;
-	  Escore_ma(&u, &fu, b, a, first, last, n, max_a);
+	u += 1;
+	Escore_ma(&u, &fu, b, a, first, last, n, max_a);
   }
   max_u = u;
   max_fu = fu; 
@@ -582,17 +582,18 @@ void theta_mle_fp(double *theta, double *b, int *a, int *first, int *last, int *
       Escore_ma(&m, &fm, b,a, first, last, n, max_a);  
     
       if (fm < s) 
-	    {
+	  {
         l = m;
-		    fl = fm;
-		    fu = s - fu; //revert s-fu
-      }else 
-      {
-		    u = m;
-		    fu = fm;
-		    fl = s - fl; // revert s-fl
+		fl = fm;
+		fu = s - fu; //revert s-fu
       }
-	    iter++;
+	  else 
+      {
+		u = m;
+		fu = fm;
+		fl = s - fl; // revert s-fl
+      }
+	  iter++;
     }
     theta[s-1] = m;
 	l = m;
@@ -606,7 +607,7 @@ void IJ_c(double *theta, double *b, int *a, int *first, int *last, double *I, do
 	
 	int len_T = *nT;
 	int len_I = *nI;
-	double Fij[len_T][max_ncat[0]]; // matrix is inverted for caching advantage in C
+	double Fij[len_T][max_ncat[0]]; // matrix is transposed for caching advantage in C
 	double M,M1,M2,M3,colsm;	
 
 	

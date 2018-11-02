@@ -512,7 +512,7 @@ coef.prms = function(object, bayes_hpd_b = 0.95, ...)
   
   x = object
   
-  hpd=function(x, conf=args$bayes_hpd_b){
+  hpd=function(x, conf=bayes_hpd_b){
     conf <- min(conf, 1-conf)
     n <- length(x)
     nn <- round( n*conf )
@@ -520,7 +520,7 @@ coef.prms = function(object, bayes_hpd_b = 0.95, ...)
     xx <- x[ (n-nn+1):n ] - x[1:nn]
     m <- min(xx)
     nnn <- which(xx==m)[1]
-    return(data.frame(l=x[ nnn ],r=x[ n-nn+nnn ]))
+    return(c(l=x[ nnn ],r=x[ n-nn+nnn ]))
   }
   
   if (x$inputs$method=="CML")
@@ -532,7 +532,9 @@ coef.prms = function(object, bayes_hpd_b = 0.95, ...)
   }
   
   if (x$inputs$method=="Bayes"){
-    hh = map_df(apply(x$est$beta,2,hpd),c)
+    
+    
+    hh = t(apply(x$est$beta,2,hpd))
     atab=data.frame(item_id = x$inputs$ssIS$item_id[-x$inputs$ssI$first],
                     a = x$inputs$ssIS$item_score[-x$inputs$ssI$first],
                     mb = colMeans(x$est$beta),

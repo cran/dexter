@@ -20,7 +20,7 @@ importFrom("stats", "complete.cases", "cor", "quantile","var",
 importFrom("graphics", "plot", "axis", "image", "layout", "par", "lines", "text","legend","abline","segments","arrows","points")
 importFrom("grDevices", "rainbow", "colorRampPalette")
 importFrom("methods", "is", "new")
-importFrom("purrr", "map","map_df")
+#importFrom("purrr", "map","map_df")
 importFrom("rprintf","rprintf")
 importFrom("utils", "str", "head", "person", "setTxtProgressBar", "tail",
              "txtProgressBar","modifyList")
