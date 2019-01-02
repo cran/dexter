@@ -37,7 +37,7 @@ test_that('start_new_project_from_oplm',
                                      responses_start = 19,
                                      use_discrim=TRUE)
     },'booklet id')
-    expect_error({
+    expect_warning({
     db = start_new_project_from_oplm(dbname=':memory:',
                                      scr_path='../skip_on_cran/duits/DUITS.scr',
                                      dat_path='../skip_on_cran/duits/DUITS.DAT',

@@ -92,21 +92,23 @@ EstIM  <- function(first,last, nCat, a, sufI, sufC, scoretab) {
       # gradient and hessian for thresholds of item i
       if (length(upd_set[[i]])>0)
       {
-        pi=pi_mat[upd_set[[i]],,drop=FALSE]
-        E=sufI[upd_set[[i]]]-pi%*%scoretab
-        H=-pi%*%tcrossprod(diag(scoretab), pi)
-        diag(H)=pi%*%scoretab+diag(H)
+        pi = pi_mat[upd_set[[i]], , drop=FALSE]
+        E = sufI[upd_set[[i]]] - pi %*% scoretab
+        H = -pi %*% tcrossprod(diag(scoretab), pi)
+        diag(H) = pi %*% scoretab + diag(H)
         
         # gradient and hessian for interaction parameter
-        ncol_pi=ncol(pi); nrow_pi=nrow(pi)
-        E=c(E,sufC[i])
-        H=cbind(H,rep.int(0,nrow(H)))
-        H=rbind(H,rep.int(0,ncol(H)))
-        k=1
-        e0=0; e1=0
-        f=matrix(0,nrow_pi,ncol_pi)
-        g=matrix(0,nrow_pi,ncol_pi)
-        h=0
+        ncol_pi = ncol(pi)
+        nrow_pi = nrow(pi)
+        
+        E = c(E, sufC[i])
+        H = cbind(H, rep.int(0, nrow(H)))
+        H = rbind(H, rep.int(0, ncol(H)))
+        k = 1
+        e0 = 0; e1 = 0
+        f = matrix(0, nrow_pi, ncol_pi)
+        g = matrix(0, nrow_pi, ncol_pi)
+        h = 0
         for (j in upd_set[[i]])
         {
           E[length(E)]=E[length(E)]-a[j]*sum((0:(ncol_pi-1))*scoretab*pi[k,])
@@ -296,7 +298,7 @@ calibrate_CML <- function(booklet, sufI, a, first, last, nIter, fixed_b=NULL) {
     converged=FALSE
     nr_iter=0
     scale=1
-    while ((!converged)&(nr_iter<max_nr_iter))
+    while ((!converged)&&(nr_iter<max_nr_iter))
     {
       iter=iter+1
       nr_iter=nr_iter+1

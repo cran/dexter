@@ -79,19 +79,19 @@ test_that('different estimation methods of ability converge on a large dataset',
   {
     db = open_project('../skip_on_cran/pisa/pisa_math.db')
     
-    expect_no_error({f = fit_enorm(db, booklet_id %in% c('1','3','4'))}, info='pisa fit_enorm')
+    f = fit_enorm(db, booklet_id %in% c('1','3','4'))
 
     meth = eval(formals(ability_tables)$method)
     prior = eval(formals(ability_tables)$prior)
     
     # run ability for each available method
-    est = reduce(apply(expand.grid(meth, prior),1,function(m)
-    {
-      expect_no_error({abl = ability_tables(f, method = m[1], prior=m[2])}, info=paste('ability pisa -', m[1], m[2]))
-      colnames(abl)[3:ncol(abl)] = paste(m[1],m[2],colnames(abl)[3:ncol(abl)],sep='.')
-      abl
-    }), 
-    inner_join, by=c('booklet_id','sumScore'))
+    est = Reduce(function(a,b){inner_join(a,b,by=c('booklet_id','sumScore'))},
+            apply(expand.grid(meth, prior),1,function(m)
+            {
+              expect_no_error({abl = ability_tables(f, method = m[1], prior=m[2])}, info=paste('ability pisa -', m[1], m[2]))
+              colnames(abl)[3:ncol(abl)] = paste(m[1],m[2],colnames(abl)[3:ncol(abl)],sep='.')
+              abl
+            }))
     
     # inspect a regression of the theta's
     combn(paste0(apply(expand.grid(meth, prior),1,paste0,collapse='.'),'.theta'), 2, function(pair)

@@ -350,8 +350,7 @@ conf_env = function(mat, level = 0.95)
                                                     R + 1L - k))
     c(k, p, sum(apply(rmat, 1L, kf, k, R))/(R + 1))
   }
-  kfun <- function(x, k1, k2) sort(x, partial = sort(c(k1, 
-                                                       k2)))[c(k1, k2)]
+  kfun <- function(x, k1, k2) sort(x, partial = sort(c(k1, k2)))[c(k1, k2)]
   index = 1L:ncol(mat)
   if (length(index) < 2L) 
     stop("This function for curves")
@@ -437,6 +436,47 @@ NULL
 NULL
 
 
+#####################################################################################
 
+#########################
+#' Rated data
+#' 
+#' A data set with rated data. A number of student performances are rated twice on several
+#' aspects by independent judges. The ratings are binary and have been summed following
+#' the theory discussed by Maris and Bechger (2006, Handbook of Statistics). Data are a
+#' small subset of data collected on the State Exam Dutch as a second language for Speaking. 
+#' 
+#' 
+#' 
+#' @name ratedData
+#' @docType data
+#' @format A data set with 75 rows and 15 columns.
+#' @keywords datasets
+NULL
+
+###############################################
+#' Scoring rules for the rated data
+#' 
+#' A set of (trivial) scoring rules for the rated data set
+#' 
+#' 
+#' @name ratedDataRules
+#' @docType data
+#' @format A data set with 42 rows and 3 columns (item_id, response, item_score).
+#' @keywords datasets
+NULL
+
+################################################
+#' Item properties in the rated data
+#' 
+#' A data set of item properties related to the rated data. These are the aspects: 
+#' IH = content, WZ = word choice and phrasing, and WK = vocabulary.
+#' 
+#' 
+#' @name ratedDataProperties
+#' @docType data
+#' @format A data set with 14 rows and 2 columns: item_id and aspect
+#' @keywords datasets
+NULL
 
 

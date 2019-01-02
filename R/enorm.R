@@ -551,7 +551,8 @@ coef.prms = function(object, bayes_hpd_b = 0.95, ...)
 
 #' Functions of theta
 #' 
-#' returns information function or expected score function for a single item, an arbitrary group of items or all items
+#' returns information function, expected score function or score simulation function 
+#' for a single item, an arbitrary group of items or all items
 #' 
 #' @param parms object produced by fit_enorm
 #' @param items vector of one or more item_id's. If NULL and booklet_id is also NULL, all items in parms are used
@@ -559,9 +560,13 @@ coef.prms = function(object, bayes_hpd_b = 0.95, ...)
 #' @param which.draw the number of the random draw (only applicable if calibration method was Bayes). If NULL, the mean 
 #' beta parameter will be used
 #' 
-#' @return a function which accepts a vector of theta's and returns an equal length vector 
-#' with the information estimate or the expected score
-#' 
+#' @return Each function returns a new function which accepts a vector of theta's. These return the following values: 
+#' \describe{
+#' \item{information}{an equal length vector with the information estimate at each value of theta.}
+#' \item{expected_score}{an equal length vector with the expected score at each value of theta}
+#' \item{r_score}{a matrix with length(theta) rows and one column for each item containing simulated scores based on theta. 
+#' To obtain test scores, use rowSums on this matrix}
+#' }
 #' @examples
 #' 
 #' db = start_new_project(verbAggrRules,':memory:')
@@ -604,9 +609,17 @@ expected_score = function(parms, items=NULL, booklet_id=NULL, which.draw=NULL)
 {
   theta_function(parms, items=items, booklet=booklet_id, which.draw=which.draw, what='expected')
 }
+
+#' @rdname information
+r_score = function(parms, items=NULL, booklet_id=NULL, which.draw=NULL)
+{
+  theta_function(parms, items=items, booklet=booklet_id, which.draw=which.draw, what='sim')
+}
+
+
 # TO DO: should be able to accept a data.frame as wel as parms in the future
 # escore can be more efficient with the main loop in C
-theta_function = function(parms, items=NULL, booklet=NULL, which.draw=NULL, what=c('information','expected'))
+theta_function = function(parms, items=NULL, booklet=NULL, which.draw=NULL, what=c('information','expected','sim'))
 {
   what = match.arg(what)
   if(is.null(items) && is.null(booklet))
@@ -669,7 +682,7 @@ theta_function = function(parms, items=NULL, booklet=NULL, which.draw=NULL, what
     }
     class(out) = append('inf_func',class(out))
     
-  } else if(what=='expected')
+  } else if(what == 'expected')
   {
     max_score = sum(parms$inputs$ssIS$item_score[fl$last])
     out = function(theta)
@@ -689,10 +702,23 @@ theta_function = function(parms, items=NULL, booklet=NULL, which.draw=NULL, what
       res
     }
     class(out) = append('exp_func',class(out))
+  } else if(what=='sim')
+  {
+    out = function(theta)
+    {
+      res = mapply(rscore, first = fl$first, last = fl$last,
+                     MoreArgs = list(theta = theta, b = parms$est$b, a = parms$inputs$ssIS$item_score))
+      colnames(res) = fl$item_id
+      res
+
+    }
+    class(out) = append('sim_func',class(out))
   }
+  
   out
 }
 
 print.inf_func = function(x,...) cat('Information function I(theta)\n')
 print.exp_func = function(x,...) cat('Expected score function E(theta)\n')
+print.sim_func = function(x,...)  cat('(x_i1, ..., x_in) ~ ENORM([theta])\n\tfunction (theta)\n')
 

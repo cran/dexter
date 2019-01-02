@@ -150,11 +150,19 @@ start_new_project_from_oplm = function(dbname, scr_path, dat_path,
       
       if(any(sapply(rsp,length) < scr$nitBook[bkl]))
       {
-        lnbr = min(which(sapply(rsp,length) < scr$nitBook[bkl])) 
-        stop(paste0('Error on line ', (lnbr + vp - 1), 
+        lnbr = which(sapply(rsp,length) < scr$nitBook[bkl])
+        warning(paste0('Warning on lines ', paste0(lnbr + vp - 1, collapse = ', '), 
                     '. Line is too short for the number of responses in booklet "',bkl[lnbr],
                     '" with response_length = ',response_length,' and number of items = ',
                     scr$nitBook[bkl[lnbr]],'.'))
+        
+        sapply(scr$nitBook[bkl[lnbr]] - sapply(rsp[lnbr], length), rep, x = ' ')
+        
+        rsp[lnbr] = mapply(c, 
+                           rsp[lnbr],  
+                           lapply(scr$nitBook[bkl[lnbr]] - sapply(rsp[lnbr], length), rep, x = ' '),
+                           SIMPLIFY = FALSE)
+        
       }
       
 
@@ -277,82 +285,86 @@ readCML = function(cml_path)
   l = l[(i + 5):length(l)]
   l = l[1:(min(which(grepl('^-+$',l,perl=TRUE) == TRUE))-1)]
   
-  pars = as_tibble(do.call(rbind, 
-                                lapply(strsplit(trimws(l),'\\s+',perl=TRUE),
-                                       function(x)
-                                       {
-                                         if(length(x) == 0) return(c())
-                                         if(substr(x[1], 1, 1) == '[') x = c(NA, NA, gsub('\\D+','',x[1]), x[2:length(x)])
-                                         x[x=='---'] = NA
-                                         return(x)
-                                        }))) 
+  pars = do.call(rbind, 
+                 lapply(strsplit(trimws(l),'\\s+',perl=TRUE),
+                        function(x)
+                        {
+                          if(length(x) == 0) return(NULL)
+                          if(substr(x[1], 1, 1) == '[') x = c(NA, NA, gsub('\\D+','',x[1]), x[2:length(x)])
+                          x[x=='---'] = NA
+                          x
+                        })
+                 ) %>%
+          as.data.frame(stringsAsFactors = FALSE) 
   
   pars[,c(1,3:ncol(pars))] = lapply(pars[,c(1,3:ncol(pars))],as.numeric)
   colnames(pars) = gsub('\\.+$','',make.names(tolower(colnames)))
   colnames(pars)[2:4] = c('item_id','item_score','beta') 
   
   # fill out the NA's in the first two columns
-  return(pars %>% fill(.data$nr, .data$item_id) %>% rename(nbr = 'nr'))
+  pars %>% 
+    fill(.data$nr, .data$item_id) %>% 
+    rename(nbr = 'nr')
 }
 
 
 ### functions borrowed from oplike package ###
 
-readSCR = function (file) 
+readSCR = function (scrfile) 
 {
-  z = file(file, "rb")
-  n = readBin(z, integer(), size = 2, 3)
+  z = file(scrfile, "rb")
+  n = readBin(z, 'int', size = 2, 3)
   nit = n[3]
   itemLabels = sapply(1:nit, function(x) {
-    sl = readBin(z, integer(), size = 1, 1)
-    rawToChar(readBin(z, raw(), n = 8)[1:sl])
+    sl = readBin(z, 'int', size = 1, 1)
+    rawToChar(readBin(z, 'raw', n = 8)[1:sl])
   })
-  globCal = readBin(z, integer(), size = 1, nit)
-  discrim = readBin(z, integer(), size = 1, nit)
-  maxScore = readBin(z, integer(), size = 1, nit)
-  parFixed = readBin(z, integer(), size = 1, nit)
-  four = readBin(z, integer(), size = 1, 4)
-  sl = readBin(z, integer(), size = 1, 1)
-  jobname = rawToChar(readBin(z, raw(), n = 12)[1:sl])
-  five = readBin(z, integer(), size = 1, 5)
-  sl = readBin(z, integer(), size = 1, 1)
-  title = rawToChar(readBin(z, raw(), n = 79)[1:sl])
+  globCal = readBin(z, 'int', size = 1, nit)
+  discrim = readBin(z, 'int', size = 1, nit)
+  maxScore = readBin(z, 'int', size = 1, nit)
+  parFixed = readBin(z, 'int', size = 1, nit)
+  four = readBin(z, 'int', size = 1, 4)
+  sl = readBin(z, 'int', size = 1, 1)
+  jobname = rawToChar(readBin(z, 'raw', n = 12)[1:sl])
+  five = readBin(z, 'int', size = 1, 5)
+  sl = readBin(z, 'int', size = 1, 1)
+  title = rawToChar(readBin(z, 'raw', n = 79)[1:sl])
   for (i in 1:20) {
-    sl = readBin(z, integer(), size = 1, 1)
+    sl = readBin(z, 'int', size = 1, 1)
     if (sl > 0) 
-      someComment = rawToChar(readBin(z, raw(), n = sl))
+      someComment = rawToChar(readBin(z, 'raw', n = sl))
   }
-  sl = readBin(z, integer(), size = 1, 1)
-  dataDir = rawToChar(readBin(z, raw(), n = 60)[1:sl])
-  sl = readBin(z, integer(), size = 1, 1)
-  dataFile = rawToChar(readBin(z, raw(), n = 12)[1:sl])
-  expanded = readBin(z, integer(), size = 1, 1)
+  sl = readBin(z, 'int', size = 1, 1)
+  dataDir = rawToChar(readBin(z, 'raw', n = 60)[1:sl])
+  sl = readBin(z, 'int', size = 1, 1)
+  dataFile = rawToChar(readBin(z, 'raw', n = 12)[1:sl])
+  expanded = readBin(z, 'int', size = 1, 1)
   expanded = 1 - expanded
-  sl = readBin(z, integer(), size = 1, 1)
-  fmt = rawToChar(readBin(z, raw(), n = sl))
-  nb = readBin(z, integer(), size = 2, 1)
-  inUse = readBin(z, integer(), size = 1, nb)
-  nMarg = readBin(z, integer(), size = 1, 1)
-  nStat = readBin(z, integer(), size = 1, 1)
+  sl = readBin(z, 'int', size = 1, 1)
+  fmt = rawToChar(readBin(z, 'raw', n = sl))
+  nb = readBin(z, 'int', size = 2, 1)
+  inUse = readBin(z, 'int', size = 1, nb)
+  nMarg = readBin(z, 'int', size = 1, 1)
+  nStat = readBin(z, 'int', size = 1, 1)
   margLabels = sapply(1:nMarg, function(x) {
-    sl = readBin(z, integer(), size = 1, 1)
-  readBin(z, raw(), n = 8)[1:sl]
+    sl = readBin(z, 'int', size = 1, 1)
+  readBin(z, 'raw', n = 8)[1:sl]
   })
   statLabels = sapply(1:nStat, function(x) {
-    sl = readBin(z, integer(), size = 1, 1)
-    readBin(z, raw(), n = 8)[1:sl]
+    sl = readBin(z, 'int', size = 1, 1)
+    readBin(z, 'raw', n = 8)[1:sl]
   })
-  nitb = readBin(z, integer(), size = 2, nb)
-  datum = readBin(z, integer(), size = 2, 5)
+  nitb = readBin(z, 'int', size = 2, nb)
+  datum = readBin(z, 'int', size = 2, 5)
   margBook = statBook = rep(NA, nb)
   itemsBook = vector(mode = "list", length = nb)
   itemsOn = vector(mode = "list", length = nb)
   for (i in 1:nb) {
-    rubbish = readBin(z, integer(), size = 2, 1)
-    margBook[i] = readBin(z, integer(), size = 1, 1)
-    statBook[i] = readBin(z, integer(), size = 1, 1)
-    itemsBook[[i]] = readBin(z, integer(), size = 2, nitb[i])
-    itemsOn[[i]] = readBin(z, integer(), size = 1, nitb[i])
+    rubbish = readBin(z, 'int', size = 2, 1)
+    margBook[i] = readBin(z, 'int', size = 1, 1)
+    statBook[i] = readBin(z, 'int', size = 1, 1)
+    itemsBook[[i]] = readBin(z, 'int', size = 2, nitb[i])
+    itemsOn[[i]] = readBin(z, 'int', size = 1, nitb[i])
   }
   close(z)
 
@@ -371,30 +383,31 @@ readSCR = function (file)
 }
 
 
-readPAR = function(file)
+readPAR = function(parfile)
 {
-  z = file(file, "rb")
-  tit = rawToChar(readBin(z, raw(), size = 1, 80))
-  n = readBin(z, integer(), size = 2, 4)
+  z = file(parfile, "rb")
+  tit = rawToChar(readBin(z, 'raw', size = 1, 80))
+  n = readBin(z, 'int', size = 2, 4)
   nit = n[3]
   nstat = -1 * n[1]
-  statlab = sapply(1:nstat, function(x) rawToChar(readBin(z, 
-                                                          raw(), size = 1, 8)))
-  par = vector(mode = "list", length = nit)
-  for (i in 1:nit) {
-    iLab = readBin(z, integer(), size = 2, 1)
-    label = rawToChar(readBin(z, raw(), size = 1, 8))
-    disc = readBin(z, integer(), size = 2, 1)
-    ncat = readBin(z, integer(), size = 2, 1)
-    if (nstat > 1) {
-      idumm = readBin(z, integer(), size = 2, 1)
-      dummy = readBin(z, integer(), size = 2, idumm)
+  statlab = sapply(1:nstat, function(x) rawToChar(readBin(z, 'raw', size = 1, 8)))
+  pars = vector(mode = "list", length = nit)
+  for (i in 1:nit) 
+  {
+    iLab = readBin(z, 'int', size = 2, 1)
+    label = rawToChar(readBin(z, 'raw', size = 1, 8))
+    disc = readBin(z, 'int', size = 2, 1)
+    ncat = readBin(z, 'int', size = 2, 1)
+    if (nstat > 1) 
+    {
+      idumm = readBin(z, 'int', size = 2, 1)
+      dummy = readBin(z, 'int', size = 2, idumm)
     }
     delta = readBin(z, numeric(), size = 8, ncat)
-    par[[i]] = list(ncat = ncat, discr = disc, delta = delta, 
+    pars[[i]] = list(ncat = ncat, discr = disc, delta = delta, 
                     ilabel = iLab, label=label)
   }
   close(z)
-  par
+  pars
 }
 

@@ -3,6 +3,7 @@
 \name{information}
 \alias{information}
 \alias{expected_score}
+\alias{r_score}
 \title{Functions of theta}
 \usage{
 information(parms, items = NULL, booklet_id = NULL,
@@ -10,6 +11,8 @@ information(parms, items = NULL, booklet_id = NULL,
 
 expected_score(parms, items = NULL, booklet_id = NULL,
   which.draw = NULL)
+
+r_score(parms, items = NULL, booklet_id = NULL, which.draw = NULL)
 }
 \arguments{
 \item{parms}{object produced by fit_enorm}
@@ -22,11 +25,17 @@ expected_score(parms, items = NULL, booklet_id = NULL,
 beta parameter will be used}
 }
 \value{
-a function which accepts a vector of theta's and returns an equal length vector 
-with the information estimate or the expected score
+Each function returns a new function which accepts a vector of theta's. These return the following values: 
+\describe{
+\item{information}{an equal length vector with the information estimate at each value of theta.}
+\item{expected_score}{an equal length vector with the expected score at each value of theta}
+\item{r_score}{a matrix with length(theta) rows and one column for each item containing simulated scores based on theta. 
+To obtain test scores, use rowSums on this matrix}
+}
 }
 \description{
-returns information function or expected score function for a single item, an arbitrary group of items or all items
+returns information function, expected score function or score simulation function 
+for a single item, an arbitrary group of items or all items
 }
 \examples{
 

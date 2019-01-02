@@ -362,8 +362,7 @@ plot.rim = function(x, items=NULL, summate=TRUE, overlay=FALSE,
 }
 
 print.rim <- function(x, ...){
-  res = paste0('Parameters for the Rasch and Interaction Model\n\nitems: ',
-               paste0(pull(x$inputs$ssI,"item_id"), collapse = ', '),
+  res = paste0('Parameters for the Rasch and Interaction Model', 
                '\n\n# use plot() for plotting the Rasch and Interaction Model or coef() for retreiving the parameters\n')
   cat(res)
   invisible(res)
