@@ -206,7 +206,7 @@ probability_to_pass = function(dataSrc, ref_items, pass_fail, design = NULL, pre
 
 print.p2pass = function(x,...)
 {
-  cat(paste('Equating information for', length(x$boklets),
+  cat(paste('Equating information for', length(x$booklets),
               'booklets. Use `coef()` to extract the statistics or `plot()` to',
               'plot the probabilty to pass and sensitivity/specificity.\n'))
   invisible(x)

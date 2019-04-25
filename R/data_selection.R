@@ -259,7 +259,8 @@ get_resp_data = function(dataSrc, qtpredicate=NULL, extra_columns=NULL, extra_de
     
     if(summarised == TRUE) {
       x = x %>%
-        distinct(.data$booklet_id, .data$person_id, .keep_all=TRUE)
+        distinct(.data$booklet_id, .data$person_id, .keep_all=TRUE) %>%
+        select(-.data$item_id, -.data$item_score)
     }
     
   } else 
@@ -383,6 +384,69 @@ semi_join.dx_resp_data = function(respData, y, by=NULL, .recompute_sumscores = F
 }
 
 
+
+
+# returns design
+# if persons==TRUE, adds a column n_persons
+# if persons==FALSE, accept only predicates that refer to booklets and booklet design
+db_get_design = function(db, qtpredicate=NULL, env=NULL)
+{
+  
+  if(is.null(qtpredicate))
+  {
+    dbGetQuery(db,
+               "WITH bkl_count AS(
+        SELECT booklet_id, COUNT(*) AS n_persons 
+          FROM dxAdministrations
+            GROUP BY booklet_id)
+          
+       SELECT booklet_id, item_id, item_position, n_persons 
+         FROM dxBooklet_design
+           INNER JOIN bkl_count USING(booklet_id);")
+  } else if(is_bkl_safe(db, qtpredicate) )
+  {
+    uns = setdiff(c(dbListFields(db,'dxAdministrations'), dbListFields(db,'dxPersons')),
+                  'booklet_id')
+    
+    suppressWarnings({where = qtpredicate2where(qtpredicate, db, env)})
+    
+    if(length(intersect(all.vars(qtpredicate), uns)) == 0) 
+    {
+      dbGetQuery(db, paste(
+        "WITH bkl_count AS(
+          SELECT booklet_id, COUNT(*) AS n_persons 
+            FROM dxAdministrations
+              GROUP BY booklet_id)
+            
+         SELECT booklet_id, item_id, item_position, n_persons 
+           FROM dxBooklets
+             INNER JOIN bkl_count USING(booklet_id)
+               INNER JOIN dxBooklet_design USING(booklet_id)
+                 INNER JOIN dxItems USING(item_id)",
+        where,";"))
+    } else
+    {
+      dbGetQuery(db, paste(
+        "SELECT booklet_id, item_id, item_position, COUNT(*) AS n_persons 
+           FROM dxBooklets
+             INNER JOIN dxBooklet_design USING(booklet_id)
+               INNER JOIN dxItems USING(item_id)
+                INNER JOIN dxAdministrations USING(booklet_id)
+                  INNER JOIN dxPersons USING(person_id)",
+        where,
+        "GROUP BY booklet_id, item_id, item_position;"))
+    }
+  } else
+  {
+    if(is.null(env))
+      env = caller_env()
+    
+    get_resp_data(db, qtpredicate, env=env, extra_columns = 'item_position')$x %>%
+      group_by(.data$booklet_id, .data$item_id, .data$item_position) %>%
+      summarise(n_persons = n()) %>%
+      ungroup()
+  }
+}
 
 
 

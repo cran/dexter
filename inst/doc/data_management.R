@@ -45,8 +45,8 @@ get_variables(db)
 
 ## ---- eval=FALSE---------------------------------------------------------
 #  # assuming an item property called `cefr_level` exists in the project
-#  design = design_as_network(db, booklet_id %in% c('bookletA','bookletX','bookletY') & cefr_level == 'B1')
-#  design_is_connected(design)
+#  design = design_info(db, booklet_id %in% c('bookletA','bookletX','bookletY') & cefr_level == 'B1')
+#  design$connected
 #  ## [1] TRUE
 
 ## ---- eval=FALSE---------------------------------------------------------
@@ -64,6 +64,6 @@ get_variables(db)
 #  # the manipulated data can be fed back to the analysis function
 #  par = fit_enorm(data)
 
-## ---- show=FALSE---------------------------------------------------------
+## ---- include=FALSE------------------------------------------------------
 close_project(db)
 

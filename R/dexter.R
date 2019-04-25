@@ -973,140 +973,166 @@ get_design = function(db,
 
 
 
-
-#' Test design as network
+# to do: add a unit test
+# to do: recursive connection check can run out of the stack in extreme cases, make non-recursive throughout
+#' Information about the design
 #'
-#' Export the test design as an incidence matrix 
-#' and a weight matrix
-#'
+#' This function is useful to inspect incomplete designs
 #'
 #' @param dataSrc Data source: a dexter project db handle or a data.frame with columns: person_id, item_id, item_score
 #' @param predicate An optional expression to subset data, if NULL all data is used
-#' @param weights Weight the edges between booklets by the number of common 
-#' \code{"items"} or \code{"responses"} (default is items). 
-#' @return A list of  data frames: 
-#' \item{im}{incidence matrix}
-#' \item{wm}{weights matrix}
-#' \item{ibl}{incidence matrix of items in blocks}
-#' \item{blb}{incidence matrix of blocks in booklets}
-#' @details 
-#' The output of this function can be passed to packages for network analysis
-#' such as \code{igraph} or \code{qgraph}. We prefer to not load these 
-#' packages automatically as they are fairly large and rely on a number 
-#' of dependencies. 
-#' @examples
-#' \donttest{
-#' \dontrun{
-#' dsgn = design_as_network(db)
-#' # Check if design is connected
 #' 
-#' design_is_connected(dsgn)
-#' }}
-#'
-design_as_network = function(dataSrc, predicate = NULL, weights=c("items","responses")){
-  
-  # to do: the else catchall works but can be done more efficient in some cases. 
-  # it would also be nice to support a design data frame instead of a responses dataframe in some way
-  # maybe we can extend things yet further to do something with balanced designs and a priori designs
-  # Left all of this for a future update
-  
-  w = match.arg(weights)
+#' 
+#' @return
+#' a list with the following components
+#' \describe{
+#' \item{design}{a data.frame with columns booklet_id, item_id, item_position, n_persons} 
+#' \item{connected_booklets}{a data.frame with columns booklet_id, group; 
+#' booklets with the same `group` are connected to eachother.} 
+#' \item{connected}{TRUE/FALSE indicating whether the design is connected or not} 
+#' \item{testlets}{a data.frame with columns item_id and testlet; items within the same testlet 
+#' always occur together in a booklet} 
+#' \item{adj_matrix}{list of two adjacency matrices: *weighted_by_items* and *weighted_by_persons*; These matrices can be 
+#' useful in visually inspecting the design using a package like *igraph*}
+#' }
+#' 
+design_info = function(dataSrc, predicate = NULL)
+{
+  out = list()
   qtpredicate = eval(substitute(quote(predicate)))
+  env = caller_env()
   
-  if(is.null(qtpredicate) && inherits(dataSrc,'DBIConnection'))
+  
+  
+  if(inherits(dataSrc,'dx_resp_data'))
+    dataSrc = dataSrc$x
+  
+  if(inherits(dataSrc, 'data.frame'))
   {
-    if(w == 'items')
+    cn = colnames(dataSrc) = tolower(colnames(dataSrc))
+    
+    if(!('item_position' %in% cn))
+      dataSrc$item_position = 0L
+    
+    
+    if(length(intersect(c('person_id','item_id'),cn)) == 2)
     {
-      design = dbGetQuery(dataSrc, 'SELECT booklet_id, item_id FROM dxBooklet_design;')
+      if(!'item_score' %in% cn)
+        dataSrc$item_score = 0L
+      
+      out$design = get_resp_data(dataSrc, qtpredicate, env=env, extra_columns = 'item_position')$x %>%
+        group_by(.data$booklet_id, .data$item_id, .data$item_position) %>%
+        summarise(n_persons = n()) %>%
+        ungroup() 
+    } else if(length(intersect(c('booklet_id','item_id'),cn)) == 2)
+    {
+      # we silently allow a design as input
+      out$design = dataSrc %>%
+        distinct(.data$booklet_id, .data$item_id, .keep_all=TRUE) %>%
+        select(.data$booklet_id, .data$item_id, .data$item_position)
+      
+      out$design$n_persons = NA_integer_
     } else
     {
-      # not entirely necessary to do a left join because booklet design can currently only be entered with response data
-      # but we might want to separate that in the future to test for connectedness a priori
-      design = dbGetQuery(dataSrc, 
-                          'WITH pcount AS (SELECT booklet_id, item_id, COUNT(*) AS n FROM dxResponses GROUP BY booklet_id, item_id)
-                          SELECT booklet_id, item_id, COALESCE(n,0) AS n_persons
-                            FROM dxBooklet_design LEFT OUTER JOIN pcount USING(booklet_id, item_id);')
+      stop('dataSrc needs to contain columns person_id, item_id, item_score')
     }
+    
+  } else if(inherits(dataSrc, 'DBIConnection'))
+  {
+    out$design = db_get_design(dataSrc, qtpredicate=qtpredicate, env=env)
   } else
   {
-    if(w == 'items')
-    {
-	  env=caller_env()
-      design = get_resp_data(dataSrc, qtpredicate, env=env)$design
-    } else
-    {
-	  env=caller_env()
-      design = get_resp_data(dataSrc, qtpredicate, env=env)$x  %>%
-        group_by(.data$booklet_id, .data$item_id) %>%
-        summarise(n_persons = n()) %>%
-        ungroup()
-    } 
+    stop("dataSrc must be of type 'DBIConnection' or 'data.frame'")
   }
   
-  if(length(unique(design$booklet_id)) < 2) stop("This makes sense only if you have at least two booklets")
+  out$design = arrange(out$design, .data$booklet_id, .data$item_position, .data$item_id)    
   
-  im = as.matrix(table(design$item_id, design$booklet_id))
-  wm = crossprod(im, im)
-  diag(wm) = 0
-  if (w=="responses") {
-    b = design %>% group_by(.data$booklet_id) %>% slice(1) %>% ungroup()
-    ww = outer(b$n_persons, b$n_persons, "+")
-    wm = wm*ww    
-  }
+  if(nrow(out$design) == 0 )
+    stop("design is empty: no data selected")
   
-  ## Design in terms of blocks of items; set of items that are always together in booklets
-  tmp=as.data.frame.array(im)
-  jj <- which(tmp==1,arr.ind=TRUE)
-  tmp[jj] = colnames(tmp)[jj[,"col"]]
-  blb=tmp[!duplicated(tmp), ]
-  blb[blb!=0]=1
-  rownames(blb)=1:nrow(blb)
-  tmp=apply(tmp,2,function(x)ifelse(x!=0,1,0))
-  ibl=data.frame(item_id =rownames(tmp), blok_id=0, stringsAsFactors=F) 
-  for (i in 1:nrow(blb)){
-    indx = as.numeric(which(apply(tmp,1,function(x) identical(as.numeric(x),as.numeric(blb[i,]))),arr.ind = TRUE, useNames = F))
-    ibl[indx,]$blok_id = i
-  }
-  list(im=im, wm=wm, ibl=ibl, blb=blb)
-}  
-
-#' Test if design is connected
-#'
-#' Use the output from design_as_network to check if your design is connected.
-#'
-#'
-#' @param design Output from design_as_network
-#' @return TRUE or FALSE
-#' @examples
-#' \donttest{
-#' \dontrun{
-#' # as an example, turn off some your booklets and see if you are
-#' # still left with a connected design
-#' 
-#' dsgn = design_as_network(db, !(booklet_id %in% c('b1','b3','b4')))
-#' 
-#' design_is_connected(dsgn)
-#' }
-#' }
-#'
-design_is_connected = function(design)
-{
-  # implementation of depth first search
-  d = design$wm
-  visited = rep(FALSE, ncol(d))
-  rownames(d) = c(1:nrow(d))
-  colnames(d) = c(1:nrow(d))
+  # connected parts
+  ds = out$design %>% 
+    inner_join(rename(out$design, booklet2 = 'booklet_id'), by = 'item_id') %>%
+    distinct(.data$booklet_id, .data$booklet2) 
+  
+  bkl = sort(unique(out$design$booklet_id))
+  
+  adjm = matrix(0L, nrow = length(bkl), ncol = length(bkl), dimnames = list(bkl, bkl))
+  adjm[as.matrix(ds)] = 1L
+  
+  visited = vector(length = ncol(adjm))
+  grp = vector(mode = 'integer', length = ncol(adjm))
   dfs = function(start)
   {
-    start = as.integer(start)
-    if(visited[start]) return(0)
+    if(visited[start]) return(0L)
     visited[start] <<- TRUE
-    vapply(rownames(d)[d[,start]>0], dfs, 0)
-    0
+    vapply((1:ncol(adjm))[adjm[,start]>0], dfs, 0L)
+    0L
+  } 
+  
+  while(!all(visited))
+  {
+    dfs(min(which(!visited)))
+    grp[grp == 0 & visited] = max(grp) + 1L
   }
-  dfs(1)
-  return(all(visited))
+  
+  out$connected_booklets = tibble(booklet_id = bkl, group = grp) %>% 
+    arrange(.data$group, .data$booklet_id) %>%
+    as.data.frame()
+  
+  out$connected = (max(grp) == 1)
+  
+  #testlets
+  out$testlets = out$design %>%
+    mutate(bnr = dense_rank(.data$booklet_id)) %>%
+    group_by(.data$item_id) %>%
+    summarize(testlet = paste(sort(.data$bnr), collapse = ' ')) %>%
+    ungroup() %>%
+    mutate(testlet = dense_rank(.data$testlet)) %>%
+    arrange(.data$testlet, .data$item_id) %>%
+    as.data.frame()
+  
+  
+  # to do: I don't see why the diagonals should be zero, check in igraph if this matters
+  # network
+  out$adj_matrix = list()
+  
+  items = as.matrix(table(out$design$item_id, out$design$booklet_id))
+  out$adj_matrix$weighted_by_items = crossprod(items, items)
+  diag(out$adj_matrix$weighted_by_items) = 0
+  
+  b = out$design %>% 
+    distinct(.data$booklet_id, .keep_all=TRUE)
+  ww = outer(b$n_persons, b$n_persons, "+")
+  out$adj_matrix$weighted_by_persons = out$adj_matrix$weighted_by_items * ww    
+  
+  out
 }
+
+
+# To be removed in version 1.0 #
+
+#' Deprecated test design functions
+#'
+#' These functions have been replaced by \code{\link{design_info}}
+#' 
+#' @param dataSrc Data source: a dexter project db handle or a data.frame with columns: person_id, item_id, item_score
+#' @param predicate An optional expression to subset data, if NULL all data is used
+#' @param weights obsolete
+#' @param design obsolete
+#' 
+design_as_network = function(dataSrc, predicate = NULL, weights=c("items","responses"))
+{
+  stop('this function has been replaced by `design_info()`, type `?design_info` for details')
+}  
+
+
+#' @rdname design_as_network
+design_is_connected = function(design)
+{
+  stop('this function has been replaced by `design_info()`, type `?design_info` for details')
+}
+
 
 
 

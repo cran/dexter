@@ -177,7 +177,8 @@ transform.df.parms = function(parms.df, out.format = c('b','beta','eta'), includ
 #' Maris, G., Bechger, T.M. and San-Martin, E. (2015) A Gibbs sampler for the (extended) marginal Rasch model. 
 #' Psychometrika. 2015; 80(4): 859–879. 
 #' 
-#' @seealso functions that accept a prms object as input: \code{\link{ability}}, \code{\link{plausible_values}}
+#' @seealso functions that accept a prms object as input: \code{\link{ability}}, \code{\link{plausible_values}}, 
+#' \code{\link{plot.prms}}
 #'
 fit_enorm = function(dataSrc, predicate = NULL, fixed_params = NULL, method=c("CML", "Bayes"), nIterations=500)
 {
@@ -202,14 +203,9 @@ fit_enorm_ = function(dataSrc, qtpredicate = NULL, fixed_params = NULL, method=c
   if(nrow(x) == 0) stop('no data to analyse')
   if(nrow(design) == 1) stop('There are responses to only one item in your selection, this cannot be calibrated.') 
   
-  if(length(unique(design$booklet_id)) > 1)
-  {
-    im = as.matrix(table(design$item_id, design$booklet_id))
-    wm = crossprod(im, im)
-    diag(wm) = 0
-    if(!design_is_connected(list(im=im, wm=wm))) stop('Your design is not connected')  
-  }
-  
+  if(!is_connected(design))
+    stop('Your design is not connected')  
+
   itm_max = x %>% 
     group_by(.data$item_id) %>% 
     summarise(maxScore = max(.data$item_score)) %>% #, nsc = n_distinct(.data$item_score)) %>%
@@ -352,9 +348,9 @@ fit_enorm_ = function(dataSrc, qtpredicate = NULL, fixed_params = NULL, method=c
     
     b = exp(runif(nrow(ssIS), -1, 1))
     
-    result = try(calibrate_Bayes(itemList=itemListInt, booklet=bkl, sufI=ssIS$sufI, b=b, a=a, 
+    result = calibrate_Bayes(itemList=itemListInt, booklet=bkl, sufI=ssIS$sufI, b=b, a=a, 
                                  first=ssI$first, last=ssI$last, nIter=nIterations,
-                                 fixed_b=fixed_b))
+                                 fixed_b=fixed_b)
     #colnames(result$b)= paste0(ssIS$item_id, "_",ssIS$item_score) 
     #colnames(result$beta)=it_sc_lab
   }

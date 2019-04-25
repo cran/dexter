@@ -32,14 +32,12 @@
 weighted_ntile = function(x, weights, n)
 {
   
-  rn = tibble(x=x,w=weights,ord=1L:length(x)) %>%
+  dat = tibble(x=x, w=weights, ord=1L:length(x)) %>%
     arrange(.data$x) %>%
     mutate(rn=cumsum(.data$w)-.data$w) %>%
-    arrange(.data$ord) %>%
-    pull(.data$rn)
+    arrange(.data$ord) 
   
-  len = sum(weights)
-  as.integer(floor(n * rn/len + 1))
+  as.integer(floor(n * dat$rn/sum(dat$w) + 1))
 }
 
 # other option, less memory efficient and does split equal values
@@ -141,6 +139,33 @@ df_identical = function(a, b)
   b = b %>% mutate_if(is.factor, as.character)
   
   return(all(a == b[,colnames(a)]))
+}
+
+is_connected = function(design)
+{
+  bkl = sort(unique(design$booklet_id))
+  nbk = length(bkl)
+  if(nbk == 1) 
+    return(TRUE)
+  
+  ds = design %>% 
+    inner_join(rename(design, booklet2 = 'booklet_id'), by = 'item_id') %>%
+    distinct(.data$booklet_id, .data$booklet2) 
+  
+  adjm = matrix(0L, nrow = nbk, ncol = nbk, dimnames = list(bkl, bkl))
+  adjm[as.matrix(ds)] = 1L
+  
+  visited = vector(length = nbk)
+  
+  dfs = function(start)
+  {
+    if(visited[start]) return(0L)
+    visited[start] <<- TRUE
+    vapply((1:ncol(adjm))[adjm[,start]>0], dfs, 0L)
+    0L
+  } 
+  dfs(1L)
+  return(all(visited))
 }
 
 ### Greatest Common Divisor via Euclid's algorithm

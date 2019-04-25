@@ -99,7 +99,7 @@ pv_recycle <- function(b,a,first,last,score,npv,mu,sigma)
   
   if(npv>1)
   {
-    tmp = matrix(tmp, length(score), npv,byrow=TRUE)[order(scrs$indx),]
+    tmp = matrix(tmp, length(score), npv,byrow=TRUE)[order(scrs$indx),,drop=FALSE]
   } else
   {
     tmp = tmp[order(scrs$indx)]

@@ -34,5 +34,6 @@ Maris, G., Bechger, T.M. and San-Martin, E. (2015) A Gibbs sampler for the (exte
 Psychometrika. 2015; 80(4): 859–879.
 }
 \seealso{
-functions that accept a prms object as input: \code{\link{ability}}, \code{\link{plausible_values}}
+functions that accept a prms object as input: \code{\link{ability}}, \code{\link{plausible_values}}, 
+\code{\link{plot.prms}}
 }

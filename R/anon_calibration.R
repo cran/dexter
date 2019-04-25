@@ -3,13 +3,6 @@
 #######################################################################
 # Using Newton-Raphson per item
 # Currently with elsym and scale
-# @param ss list containing:
-#   il: one row per item, ordered item_id
-#       tibble(first, last, sufC <sum(item_score*sumScore)>, nCat <nbr of score categories including 0>)
-#   sl: one row per item-scorecat(including 0), ordered item_id, item_score
-#       tibble(item_score, sufI <count for item_score>, sufC <sum(item_score * sumScore)>)
-#   tl: one row per testscore (only one test allowed), complete range 0:max_observed, ordered by test_score
-#       tibble(N <count for test score>)
 # @returns:
 #      bRM:    Parameter estimates of the Rasch model
 #      bIM:    Parameter estimates of the Interaction model
@@ -21,13 +14,7 @@
 #########################################################################
 
 EstIM  <- function(first,last, nCat, a, sufI, sufC, scoretab) {
-  #first = ss$il$first
-  #last = ss$il$last
-  #a = ss$sl$item_score
-  #sufI = ss$sl$sufI
-  #sufC = ss$il$sufC
-  #C = rep(1:nrow(ss$il), ss$il$nCat)
-  #scoretab = ss$tl$N
+
   C = rep(1:length(first), nCat)
   
   m=sum(scoretab) ##
@@ -218,7 +205,7 @@ calibrate_Bayes = function(itemList, booklet, sufI, b, a, first, last, nIter, fi
       for (bl in 1:nb) 
       {
         booklet[[bl]]$lambda = booklet[[bl]]$lambda*f^(0:sum(a[booklet[[bl]]$last]))
-        booklet[[bl]]$lambda = booklet[[bl]]$lambda/booklet[[bl]]$lambda[1]
+        if (booklet[[bl]]$lambda[1]!=0) booklet[[bl]]$lambda = booklet[[bl]]$lambda/booklet[[bl]]$lambda[1]
         if (lambda_out) lx[[bl]][iter,]=booklet[[bl]]$lambda
       }
     }else
@@ -269,7 +256,7 @@ calibrate_CML <- function(booklet, sufI, a, first, last, nIter, fixed_b=NULL) {
     while ((!converged)&(iter<=nIter))
     {
       iter=iter+1
-      EsufI=EsufI-EsufI
+      EsufI[] = 0
       for (bl in 1:nb)
       {
         EsufI = EsufI + E.STEP(b,a,booklet[[bl]]$first,booklet[[bl]]$last,booklet[[bl]]$scoretab) 
@@ -302,8 +289,8 @@ calibrate_CML <- function(booklet, sufI, a, first, last, nIter, fixed_b=NULL) {
     {
       iter=iter+1
       nr_iter=nr_iter+1
-      EsufI=EsufI-EsufI
-      H=H-H
+      EsufI[] = 0
+      H[] = 0
       for (bl in 1:nb)
       {
         EsufI = EsufI + E.STEP(b,a,booklet[[bl]]$first,booklet[[bl]]$last,booklet[[bl]]$scoretab) 
@@ -320,6 +307,7 @@ calibrate_CML <- function(booklet, sufI, a, first, last, nIter, fixed_b=NULL) {
       H[ref_cat,ref_cat]=1
       EsufI[ref_cat]=sufI[ref_cat]
       b = b*exp(solve(H*scale,sufI-EsufI))
+
       converged=(max(abs(EsufI-sufI))/nn<1e-10)
       setTxtProgressBar(pb, value=iter)
       if (nr_iter==2) scale=1
@@ -343,7 +331,7 @@ calibrate_CML <- function(booklet, sufI, a, first, last, nIter, fixed_b=NULL) {
     while ((!converged)&(iter<=nIter))
     {
       iter=iter+1
-      EsufI=EsufI-EsufI
+      EsufI[] = 0
       for (bl in 1:nb)
       {
         EsufI = EsufI + E.STEP(b,a,booklet[[bl]]$first,booklet[[bl]]$last,booklet[[bl]]$scoretab) 
@@ -369,8 +357,8 @@ calibrate_CML <- function(booklet, sufI, a, first, last, nIter, fixed_b=NULL) {
     {
       iter=iter+1
       nr_iter=nr_iter+1
-      EsufI=EsufI-EsufI
-      H=H-H
+      EsufI[] = 0
+      H[] = 0
       for (bl in 1:nb)
       {
         EsufI = EsufI + E.STEP(b,a,booklet[[bl]]$first,booklet[[bl]]$last,booklet[[bl]]$scoretab) 

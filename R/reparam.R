@@ -80,13 +80,17 @@ beta2eta_ <-function(a, beta, first, last)
   nI = length(first)
   for (i in 1:nI)
   {
+    m = last[i]-first[i]
     eta[first[i]] = beta[first[i]]*a[first[i]]
-    for (j in (first[i]+1):last[i]) 
+    if (m>0)
     {
-      eta[j] = eta[j] + beta[j-1]*a[j-1]
-      for (g in (first[i]+1):j)
+      for (j in (first[i]+1):last[i]) 
       {
-        eta[j] = eta[j] + beta[g]*(a[g]-a[g-1])
+        eta[j] = eta[j] + beta[j-1]*a[j-1]
+        for (g in (first[i]+1):j)
+        {
+          eta[j] = eta[j] + beta[g]*(a[g]-a[g-1])
+        }
       }
     }
   }

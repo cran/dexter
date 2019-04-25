@@ -120,14 +120,16 @@ For consistency, predicates also work when the `dataSrc` argument is a data.fram
 
 Because the `predicate` is passed to the functions that use it independently, one can do strange things like estimate an IRT model from the test responses of females, and use it to score the tests of males. 
 
-Another risk with subsetting is that it may destroy the connectedness of the design. The user can check against this with function `design_is_connected`. 
+Another risk with subsetting is that it may destroy the connectedness of the design. The user can check against this with the function `design_info` (which also offers other useful information about the design).
 
 ```{r, eval=FALSE}
 # assuming an item property called `cefr_level` exists in the project
-design = design_as_network(db, booklet_id %in% c('bookletA','bookletX','bookletY') & cefr_level == 'B1')
-design_is_connected(design)
+design = design_info(db, booklet_id %in% c('bookletA','bookletX','bookletY') & cefr_level == 'B1')
+design$connected
 ## [1] TRUE
 ```
+
+
 
 Even though predicates offer a lot of flexibility, there are some limitations due to the fact that they only work on the individual response level. The typical case that can not be solved by using a predicate, is to omit a whole booklet or person based on some of their responses, but fortunately there is a relatively easy way to get around that limitation. 
 
@@ -156,6 +158,6 @@ par = fit_enorm(data)
 
 
 
-```{r, show=FALSE}
+```{r, include=FALSE}
 close_project(db)
 ```

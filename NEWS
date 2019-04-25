@@ -1,6 +1,12 @@
+# dexter 0.8.5
+
+* new function `design_info()` returns extensive information about incomplete test designs. Functions `design_as_network()` and `design_is_connected()` are deprecated.
+
+* correction for a bug which caused NA's in plausible values for booklets with 1 respondent and nPV>1
+
 # dexter 0.8.4
 
-* Minor adjustments for better compatibility with an announced update of package tibble
+* Tiny changes for compatibility with dependencies
 
 # dexter 0.8.3
 
