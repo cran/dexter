@@ -1,7 +1,6 @@
 ## ----setup, include=FALSE------------------------------------------------
-knitr::opts_chunk$set(echo = TRUE, dev='CairoPNG') #
-library(dexter)
-library(calibrate)
+knitr::opts_chunk$set(echo = TRUE, dev='CairoPNG') 
+options(dexter.progress=FALSE)
 library(dplyr)
 library(ggplot2)
 
@@ -51,11 +50,11 @@ text(1,1-rg/2,'TPR',cex=.6)
 
 ## ----echo=FALSE, message=FALSE, results='hide', fig.align='center', fig.height=4, fig.width=4----
 library(dexter)
-db = start_new_project(verbAggrRules, "verbAggression.db")
+db = start_new_project(verbAggrRules, ":memory:")
 add_booklet(db, verbAggrData, "data")
 ts = get_testscores(db, item_position<15) %>%
   inner_join(get_testscores(db, item_position>=15), by='person_id') %>%
-  rename(ref_test= 'test_score.y', new_test = 'test_score.x')
+  rename(ref_test= 'booklet_score.y', new_test = 'booklet_score.x')
 #plot(ts$new_test, ts$ref_test, ylab="ref. test score", xlab="new test score", cex=0.8, pch=16)
 #abline(h=10, lty=2, col="green")
 ggplot(ts, aes(x = new_test, y = ref_test)) +
@@ -85,12 +84,38 @@ lines(0:28, specificity, col="green", type="o")
 
 ## ---- fig.align='center', fig.height=5, fig.width=5----------------------
 plot(1-specificity, sensitivity, col="green", xlim=c(0,1), ylim=c(0,1), type="l",bty='l')
-textxy(1-specificity, sensitivity, as.character(0:28), cex=0.7, offset = 0)
+text(1-specificity, sensitivity, as.character(0:28), cex=0.7, offset = 0)
 abline(0,1,lty=2, col="grey")
 
 ## ---- echo=FALSE---------------------------------------------------------
-dbDisconnect(db)
-unlink("verbAggression.db")
+close_project(db)
+
+
+## ---- eval=F, include=F--------------------------------------------------
+#  # alternatief voor gesimuleerde data, misschine code laten zien?
+#  nP = 700
+#  nI = 60
+#  theta = c(rnorm(500, 0,2), rnorm(nP-500, 0.5,2))
+#  delta = runif(nI,-1,1)
+#  items = sprintf('%02i',1:nI)
+#  
+#  sim_func = r_score(data.frame(item_id=items, item_score=1, delta=delta))
+#  
+#  data = sim_func(theta)
+#  
+#  data[1:500, 41:60] = NA
+#  data[501:nP, 1:20] = NA
+#  
+#  ref_items = items[1:40]
+#  target_items = items[21:60]
+#  
+#  p = fit_enorm(method='Bayes', nIterations = 5000)
+#  
+#  pp = probability_to_pass(data, p,
+#                           ref_items = ref_items, pass_fail = 23,
+#                           target_booklets = data.frame(item_id=target_items))
+#  
+#  
 
 ## ---- echo=FALSE, message=FALSE, results='hide'--------------------------
 nP = 700
@@ -105,7 +130,7 @@ names(x2) = paste0('i', 21:60)
 
 ## ---- echo=FALSE, message=FALSE, results='hide'--------------------------
 rules = data.frame(item_id=rep(paste0('i',1:60), each=2), response=rep(c(0,1),60), item_score=rep(c(0,1),60))
-db_sm = start_new_project(rules, db="sim_inc")
+db_sm = start_new_project(rules, ":memory:")
 add_booklet(db_sm, x=x1, "bk1")
 add_booklet(db_sm, x=x2, "bk2")
 ref_items = paste0("i",1:40)
@@ -114,17 +139,20 @@ pass_fail = 23
 target_items = colnames(x2)
 
 ## ---- message=FALSE, fig.align='center', results='hide',fig.height=4,fig.width=4----
-ou_e = probability_to_pass(db_sm, ref_items = ref_items, 
-                                  design = tibble(booklet_id="bk2", item_id=target_items), 
-                                  pass_fail = pass_fail)
+p_sm = fit_enorm(db_sm, method='Bayes', nIterations = 5000)
+
+ou_e = probability_to_pass(db_sm, p_sm,
+                           ref_items = ref_items, 
+                           target_booklets = tibble(booklet_id="bk2", item_id=target_items), 
+                           pass_fail = pass_fail)
 plot(ou_e, what="equating")
 
 ## ---- echo=TRUE, fig.align='center', results='hide', fig.height=4, fig.width=4----
 plot(ou_e, what='sens/spec')
 
 ## ---- echo=FALSE, message=FALSE------------------------------------------
-dbDisconnect(db_sm)
-unlink("sim_inc")
+close_project(db_sm)
+
 
 ## ---- eval = FALSE-------------------------------------------------------
 #    p_pass_given_s = out$probability_to_pass

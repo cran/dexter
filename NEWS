@@ -1,3 +1,26 @@
+# dexter 1.0.0
+
+## Breaking changes
+
+* the interfaces for the standard setting functions have changed, these functions have new names and different arguments
+
+* the interface for probability_to_pass has changed
+
+* the name of the column 'sumScore', outputted by a number of functions, has changed to 'booklet_score'
+
+## other changes
+
+* dataSrc may now also be a wide format data matrix (in addition to a database or a long format data.frame)
+
+* fit_enorm, ability and plausible_values have an extra argument 'merge_within_persons' which determines if different booklets for the same person are combined
+
+* plausible_values can use a normal or a mixture prior
+
+* the dependency on dbplyr has been removed. This again allows the use of data.frame columns in predicates (this caused error messages when using dbplyr 1.4+)
+
+* generally faster due to the excellent Rcpp and RcppArmadillo packages
+
+
 # dexter 0.8.5
 
 * new function `design_info()` returns extensive information about incomplete test designs. Functions `design_as_network()` and `design_is_connected()` are deprecated.

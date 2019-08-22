@@ -5,10 +5,11 @@
 \title{Generate plausible testscores}
 \usage{
 plausible_scores(dataSrc, parms = NULL, predicate = NULL,
-  items = NULL, covariates = NULL, keep.observed = TRUE, nPS = 1)
+  items = NULL, covariates = NULL, keep.observed = TRUE, nPS = 1,
+  merge_within_persons = FALSE)
 }
 \arguments{
-\item{dataSrc}{Data source: a dexter project db handle or a data.frame with columns: person_id, item_id, item_score}
+\item{dataSrc}{a connection to a dexter database, a matrix, or a data.frame with columns: person_id, item_id, item_score}
 
 \item{parms}{An object returned by function \code{fit_enorm} and containing
 parameter estimates. If parms is given the function provides plausible scores conditional on the 
@@ -24,13 +25,16 @@ all items occurring in \code{dataSrc} are used.}
 A covariate must be a discrete person covariate (e.g. not a float) that indicates nominal categories, e.g. gender or school
 If dataSrc is a data.frame, it must contain the covariate.}
 
-\item{keep.observed}{In some cases, responses to one or more of the items have been observed. 
-The user can choose to keep these observations or generate new ones.}
+\item{keep.observed}{If responses to one or more of the items have been observed,
+the user can choose to keep these observations or generate new ones.}
 
 \item{nPS}{Number of plausible testscores to generate per person.}
+
+\item{merge_within_persons}{If a person took multiple booklets, this indicates
+whether plausible scores are generated per person (TRUE) or per booklet (FALSE)}
 }
 \value{
-A data.frame with columns booklet_id, person_id, sumScore and nPS plausible scores
+A data.frame with columns booklet_id, person_id, booklet_score and nPS plausible scores
 named PS1...PSn.
 }
 \description{

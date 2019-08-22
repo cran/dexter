@@ -1,5 +1,5 @@
 ## ----setup, include=FALSE------------------------------------------------
-knitr::opts_chunk$set(echo = FALSE)
+knitr::opts_chunk$set(echo = FALSE, dev='CairoPNG')
 library(dexter)
 library(latticeExtra)
 fq = c(10,12,30,20,40,24,15,18,14)
@@ -7,57 +7,14 @@ fq=matrix(fq,3,3)
 attr(fq,"dimnames")=list(c(0,1,2),c(0,1,2))
 den = matrix(c(10,32,85,32,85,42,85,42,14),3,3)
 
-blues=function (n, h = 221, c. = c(80, 0), l = c(30, 90), power = 1.5, 
-          fixup = TRUE, gamma = NULL, alpha = 1, ...) 
-{
-  if (!is.null(gamma)) 
-    warning("'gamma' is deprecated and has no effect")
-  if (n < 1L) 
-    return(character(0L))
-  c <- rep(c., length.out = 2L)
-  l <- rep(l, length.out = 2L)
-  power <- rep(power, length.out = 2L)
-  rval <- seq(1, 0, length = n)
-  rval <- colorspace::hex(colorspace::polarLUV(L = l[2L] - diff(l) * rval^power[2L], 
-                       C = c[2L] - diff(c) * rval^power[1L], H = h[1L]), fixup = fixup, 
-              ...)
-  if (!missing(alpha)) {
-    alpha <- pmax(pmin(alpha, 1), 0)
-    alpha <- format(as.hexmode(round(alpha * 255 + 1e-04)), 
-                    width = 2L, upper.case = TRUE)
-    rval <- paste(rval, alpha, sep = "")
-  }
-  return(rval)
-}
+blues = c("#005D88","#0086A3","#84AEBF","#C2D0D6","#E2E2E2")
+reds = c("#972B2F","#A94C4F","#BD6F71","#D39A9B","#F7EFEF")
 
-reds=
-function (n, h = 11, c. = c(80, 5), l = c(35, 95), power = 0.6, 
-          fixup = TRUE, gamma = NULL, alpha = 1, ...) 
-{
-  if (!is.null(gamma)) 
-    warning("'gamma' is deprecated and has no effect")
-  if (n < 1L) 
-    return(character(0L))
-  c <- rep(c., length.out = 2L)
-  l <- rep(l, length.out = 2L)
-  power <- rep(power, length.out = 2L)
-  rval <- seq(1, 0, length = n)
-  rval <- colorspace::hex(colorspace::polarLUV(L = l[2L] - diff(l) * rval^power[2L], 
-                       C = c[2L] - diff(c) * rval^power[1L], H = h[1L]), fixup = fixup, 
-              ...)
-  if (!missing(alpha)) {
-    alpha <- pmax(pmin(alpha, 1), 0)
-    alpha <- format(as.hexmode(round(alpha * 255 + 1e-04)), 
-                    width = 2L, upper.case = TRUE)
-    rval <- paste(rval, alpha, sep = "")
-  }
-  return(rval)
-}
 
 ## ---- figProf, echo=FALSE, results="hide",fig.height=4,fig.width=4,fig.align='center',message=FALSE----
 # fig.align='center' does not work anymore when you specify any css styles
 # therefore the: display:block;margin: 0 auto;
-db = start_new_project(verbAggrRules, ":memory:", covariates=list(gender="<unknown>"))
+db = start_new_project(verbAggrRules, ":memory:", person_properties=list(gender="unknown"))
 add_booklet(db, verbAggrData, "agg")
 add_item_properties(db, verbAggrProperties)
 profile_plot(db, item_property='mode', covariate='gender', booklet_id=='agg')
@@ -106,8 +63,7 @@ cloud(conditional, panel.3d.cloud = panel.3dbars,
 ## ---- fig3, echo=FALSE,out.extra='style="margin-left: -30px; margin-top: -50px;"'----
 special = fq / den
 j = 6-c(1,2,3,2,3,4,3,4,5)
-pa=blues(5)
-sp=pa[j]
+sp=blues[j]
 cloud(special, panel.3d.cloud = panel.3dbars,
       xbase = 0.4, ybase = 0.4, zlim = c(0, 1),
       scales = list(arrows = FALSE, just = "right"), xlab = "A", ylab = "B",zlab ='',
@@ -117,9 +73,8 @@ cloud(special, panel.3d.cloud = panel.3dbars,
       screen = list(z = 40, x = -30))
 
 ## ---- fig41, echo=FALSE,out.extra='style="margin-left: -30px; margin-top: -50px;"'----
-pa=reds(5)
 hi = c(1,4,5,6,9)
-sp[hi] = pa[j[hi]]
+sp[hi] = reds[j[hi]]
 
 cloud(special, panel.3d.cloud = panel.3dbars,
       xbase = 0.4, ybase = 0.4, zlim = c(0, 1),
@@ -145,6 +100,6 @@ axis(2, at = 0:2,lty=0)
 profile_plot(db, item_property='mode', covariate='gender', booklet_id=='agg', main='Gender')
 mtext('Do versus Want')
 
-## ---- show=FALSE---------------------------------------------------------
+## ---- include=FALSE------------------------------------------------------
 close_project(db)
 

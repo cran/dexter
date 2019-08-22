@@ -4,15 +4,15 @@
 \alias{distractor_plot}
 \title{Distractor plot}
 \usage{
-distractor_plot(dataSrc, item, predicate = NULL, legend = TRUE,
-  curtains = 10, ...)
+distractor_plot(dataSrc, item_id, predicate = NULL, legend = TRUE,
+  curtains = 10, col = NULL, ...)
 }
 \arguments{
-\item{dataSrc}{Data source: a dexter project db handle or a data.frame with columns: person_id, item_id, response, item_score
+\item{dataSrc}{a connection to a dexter database or a data.frame with columns: person_id, item_id, response, item_score
 and optionally booklet_id}
 
-\item{item}{The ID of the item to plot. A separate plot will be produced
-for each booklet that contains the item, or an error message if the item ID
+\item{item_id}{The ID of the item to plot. A separate plot will be produced
+for each booklet that contains the item, or an error message if the item_id
 is not known. Each plot contains a non-parametric regression of each possible
 response on the total score.}
 
@@ -23,6 +23,8 @@ response on the total score.}
 \item{curtains}{100*the tail probability of the sum scores to be shaded. Default is 10.
 Set to 0 to have no curtains shown at all.}
 
+\item{col}{vector of colors to use for plotting}
+
 \item{...}{further arguments to plot.}
 }
 \description{
@@ -30,7 +32,7 @@ Produce a diagnostic distractor plot for an item
 }
 \details{
 Customization of title and subtitle can be done by using the arguments main and sub. 
-These arguments can contain references to the variables item_id, booklet_id, item_position(only if dataSrc is a dexter db),
+These arguments can contain references to the variables item_id, booklet_id, item_position(if available),
 pvalue, rit and rir. References are made by prefixing these variables with a dollar sign. Variable names may be postfixed 
 with a sprintf style format string, e.g. 
 \code{distractor_plot(db, main='item: $item_id', sub='Item rest correlation: $rir:.2f')}

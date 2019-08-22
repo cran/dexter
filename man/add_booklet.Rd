@@ -11,7 +11,7 @@ add_response_data(db, data, auto_add_unknown_rules = FALSE,
   missing_value = "NA")
 }
 \arguments{
-\item{db}{A handle to the database, i.e. the output of \code{start_new_project}
+\item{db}{a connection to a dexter database, i.e. the output of \code{start_new_project}
 or \code{open_project}}
 
 \item{x}{A data frame containing the responses and, optionally,
@@ -37,7 +37,7 @@ A list with information about the recent import.
 Add item response data in long or wide format
 }
 \details{
-It is a common practice to keep respons data in tables where each row 
+It is a common practice to keep response data in tables where each row 
 contains the responses from a single person. \code{add_booklet} is provided to input
 data in that form, one booklet at a time. 
 

@@ -15,7 +15,8 @@ expected_score(parms, items = NULL, booklet_id = NULL,
 r_score(parms, items = NULL, booklet_id = NULL, which.draw = NULL)
 }
 \arguments{
-\item{parms}{object produced by fit_enorm}
+\item{parms}{object produced by \code{\link{fit_enorm}} or a data.frame with columns item_id, item_score and, 
+depending on parametrization, a column named beta/delta, eta or b}
 
 \item{items}{vector of one or more item_id's. If NULL and booklet_id is also NULL, all items in parms are used}
 
@@ -34,8 +35,7 @@ To obtain test scores, use rowSums on this matrix}
 }
 }
 \description{
-returns information function, expected score function or score simulation function 
-for a single item, an arbitrary group of items or all items
+returns information function, expected score function or score simulation function for a single item, an arbitrary group of items or all items
 }
 \examples{
 
@@ -62,7 +62,7 @@ plot(ifun,from=-4,to=4, xlab='theta', ylab='test information')
 
 par(new=TRUE)
 
-plot(density(pv$PV1), col='green', axes=FALSE,xlab=NA, ylab=NA,main=NA)
+plot(density(pv$PV1), col='green', axes=FALSE, xlab=NA, ylab=NA, main=NA)
 axis(side=4)
 mtext(side = 4, line = 2.5, 'population density (green)')
 

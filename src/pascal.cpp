@@ -1,9 +1,5 @@
-#include<math.h>
-#include<R.h>
 #include<Rmath.h>
-#include<Rdefines.h>
-#include<Rinternals.h>
-#include "pascal.h"
+
 
 static const int start[500]= {0,
 1,

@@ -2,6 +2,7 @@
 utils::globalVariables(c("."))
 
 
+
 #' Dexter: data analyses for educational and psychological tests.
 #' 
 #' Dexter provides a comprehensive solution for managing and analyzing educational test data.
@@ -28,7 +29,7 @@ utils::globalVariables(c("."))
 #'
 #' @param rules A data frame with columns \code{item_id}, \code{response}, and \code{item_score}.
 #' The order is not important but spelling is. Any other columns will be ignored.
-#' @param db A connection to an existing sqlite database or a string specifying a filename
+#' @param db_name A connection to an existing sqlite database or a string specifying a filename
 #' for a new sqlite database to be created. If this name does not
 #' contain a path, the file will be created in the work
 #' directory. Any existing file with the same name will be overwritten. For an in-memory database
@@ -36,8 +37,7 @@ utils::globalVariables(c("."))
 #' @param person_properties An optional list of person properties. Names should correspond to person_properties intended to be used in the project.
 #' Values are used as default (missing) values. The datatype will also be inferred from the values.
 #' Known person_properties will be automatically imported when adding response data with \code{\link{add_booklet}}. 
-#' @param covariates Deprecated alias for person_properties.
-#' @return If the scoring rules pass a sanity check, a handle to the data base.
+#' @return a database connection object.
 #' @details This package only works with closed items (e.g. likert, MC or possibly short answer)
 #' it does not score any open items.
 #' The first step to creating a project is to import an exhaustive list of all items and
@@ -55,32 +55,26 @@ utils::globalVariables(c("."))
 #'                        person_properties = list(gender = "unknown"))
 #' }
 #' 
-start_new_project = function(rules, db="dexter.db", person_properties = NULL, covariates = person_properties) 
+start_new_project = function(rules, db_name="dexter.db", person_properties = NULL) 
 {
-  if(!is.null(covariates))
-  {
-    dbCheck_reserved_colnames(names(covariates))
-  }
-  check_arg(person_properties, 'list', nullable=TRUE)
-  check_arg(covariates, 'list', nullable=TRUE)
-  check_arg(db, 'character', .length = 1)
-
-  # for backward compatibility we rename if necessary
-  colnames(rules)[colnames(rules)=='item'] = 'item_id'
-  colnames(rules)[colnames(rules)=='score'] = 'item_score'
+  check_df(rules, c("item_id", "response", "item_score"))
+  check_list(person_properties, nullable=TRUE)
   
+  if(!is.null(person_properties))
+      dbCheck_reserved_colnames(names(person_properties))
+
   rules = rules[, c("item_id", "response", "item_score")]
   rules$response = as.character(rules$response)
   rules$response[is.na(rules$response)] = 'NA'
   rules$item_id = as.character(rules$item_id)
 
-  if(any(is.na(rules$item_id)) || any(is.na(rules$item_score)))
-    stop("The item_id and item_score columns may not contain NA values")
-  
   if(any(as.numeric(rules$item_score) %% 1 != 0))
     stop('only integer scores are allowed')
   
   rules$item_score = as.integer(rules$item_score)
+  
+  if(any(is.na(rules$item_id)) || any(is.na(rules$item_score)))
+    stop("The item_id and item_score columns may not contain NA values")
   
   
   sanity = rules %>%
@@ -96,23 +90,31 @@ start_new_project = function(rules, db="dexter.db", person_properties = NULL, co
     stop('Scoring rules are not valid')
   } else 
   {
-    if (inherits(db,'character'))
+    if (inherits(db_name,'character'))
     {
-      if (file.exists(db)) file.remove(db)
-      db = dbConnect(SQLite(), db)
+      check_string(db_name)
+      if (file.exists(db_name) && !suppressWarnings({file.remove(db_name)}))
+        stop('Could not overwrite file: ', db_name)
+      
+      db = dbConnect(SQLite(), db_name)
+    } else if(!inherits(db_name, 'DBIConnection'))
+    {
+      stop('argument db_name must be a filename or a DBIconnection')
     }
     dbTransaction(db,
     {
-      project_CreateTables(db, covariates)
-      dbExecute(db,'INSERT INTO dxItems(item_id) VALUES(:id);', 
+      project_CreateTables(db, person_properties)
+      
+      dbExecute_param(db,'INSERT INTO dxitems(item_id) VALUES(:id);', 
                       tibble(id=unique(rules$item_id)))
-      dbExecute(db,
-                'INSERT INTO dxScoring_rules(item_id, response, item_score) 
+      dbExecute_param(db,
+                'INSERT INTO dxscoring_rules(item_id, response, item_score) 
                           VALUES(:item_id, :response, :item_score);', 
-				        select(rules, .data$item_id, .data$response, .data$item_score))
-    },on_error = function(e){dbDisconnect(db);stop(e)})
-    return(db)
+				        rules)
+    },
+    on_error = function(e){dbDisconnect(db);stop(e)})
   }
+  db
 }
 
 
@@ -122,22 +124,22 @@ start_new_project = function(rules, db="dexter.db", person_properties = NULL, co
 #' Opens a database created by function \code{start_new_project}
 #'
 #'
-#' @param db_name The name of the data base to be opened.
-#' @param convert_old 
-#' Ignored, this argument will be removed in a future version. 
-#' @return A handle to the dexter project database.
+#' @param db_name The name of the database to be opened.
+#' @return a database connection object
 #'
-open_project = function(db_name="dexter.db", convert_old=NULL) {
-  
-  if (!file.exists(db_name)) stop("There is no such file")
+open_project = function(db_name="dexter.db") 
+{
+  check_string(db_name)
+  if (!file.exists(db_name)) 
+    stop("There is no such file")
     
   db = dbConnect(SQLite(), db_name)
-  dbExecute(db,'pragma foreign_keys=1;')
-  if(!dbExistsTable(db,'dxItems'))
+  if(!dbExistsTable(db,'dxitems'))
   {
     dbDisconnect(db)
     stop('Sorry, this does not appear to be a Dexter database.')
   }
+  dbExecute(db,'pragma foreign_keys=1;')
   return(db)
 }
 
@@ -145,7 +147,7 @@ open_project = function(db_name="dexter.db", convert_old=NULL) {
 #'
 #' This is just an alias for \code{DBI::dbDisconnect(db)}, included for completeness
 #'
-#' @param db a Dexter project db handle
+#' @param db connection to a dexter database
 #'
 close_project = function(db) dbDisconnect(db) 
 
@@ -157,58 +159,72 @@ close_project = function(db) dbDisconnect(db)
 #' scoring rules from the keys to the correct responses
 #'
 #'
-#' @param keys  A data frame containing columns \code{item_id}, \code{nOptions}, and
-#' \code{key} (the spelling is important). See details.
+#' @param keys  A data frame containing columns \code{item_id}, \code{noptions}, and
+#' \code{key} See details.
 #' @param include_NA_rule whether to add an option 'NA' (which is scored 0) to each item
 #' @return A data frame that can be used as input to \code{start_new_project}
 #' @details
 #' This function might be useful in setting up the scoring rules when all items
-#' are multiple-choice and scored as 0/1. (Hint: Because the order in which the
-#' scoring rules is not important, one can use the function to generate rules for
-#' many MC items and then append per hand the rules for a few complex items.)
+#' are multiple-choice and scored as 0/1. 
 #'
-#' The input data frame must contain the exact name of each item, the number
+#' The input data frame must contain the exact id of each item, the number
 #' of options, and the key. If the keys are all integers, it will be assumed that
-#' responses are coded as 1 through nOptions. If they are all uppercase letters,
+#' responses are coded as 1 through noptions. If they are all  letters,
 #' it is assumed that responses are coded as A,B,C,... All other cases result
 #' in an error.
 #'
 keys_to_rules = function(keys, include_NA_rule = FALSE) 
 {
-  # for backward compatibility we rename
-  colnames(keys)[colnames(keys)=='item'] = 'item_id'
-  
+  colnames(keys) = tolower(colnames(keys))
+  check_df(keys, c('item_id','noptions','key'))
   keys = mutate_if(keys, is.factor, as.character)
+  lwr = FALSE
   
-  if (is.numeric(keys$key)) ABC=FALSE else {
-    if (all(keys$key %in% LETTERS)) ABC=TRUE
-    else stop("You have inadmissible keys")
+  if (is.numeric(keys$key))
+  {
+    ABC=FALSE
+  } 
+  else 
+  {
+    if(all(keys$key %in% LETTERS))
+    {
+      ABC = TRUE
+    } else if(all(keys$key %in% letters))
+    {
+      ABC=TRUE
+      lwr=TRUE
+      keys$key = toupper(keys$key)
+    } else stop("You have inadmissible keys")
   }
   if (ABC) {
     m = match(keys$key, LETTERS)
-    if (any(m>keys$nOptions)) stop("You have out-of-range keys")
+    if (any(m>keys$noptions)) stop("You have out-of-range keys")
     r = keys %>% 
       group_by(.data$item_id) %>% 
       do({
-      y = tibble(response=LETTERS[1:.$nOptions[1]], item_score=0)
+      y = tibble(response=LETTERS[1:.$noptions[1]], item_score=0)
       y$item_score[match(.$key[1],LETTERS)] = 1
       y
     })
   } else {
-    if (any(keys$key>keys$nOptions)) stop("You have out-of-range keys")
+    if (any(keys$key>keys$noptions)) stop("You have out-of-range keys")
     r = keys %>% group_by(.data$item_id) %>% do({
-      y = tibble(response=1:.$nOptions[1], item_score=0)
+      y = tibble(response=1:.$noptions[1], item_score=0)
       y$item_score[.$key[1]] = 1
       y
     })
   }
   r = ungroup(r)
+  if(lwr)
+  {
+    r$response = tolower(r$response)
+  }
   
   if(include_NA_rule){
     r = bind_rows(r, tibble(item_id=unique(r$item_id), response='NA', item_score=0))
   }
   r$item_score = as.integer(r$item_score)
-  as.data.frame(r)
+  df_format(r)
 }
 
 
@@ -218,7 +234,7 @@ keys_to_rules = function(keys, include_NA_rule = FALSE)
 #' Having to alter or add a scoring rule is occasionally necessary, e.g. in case of a key error. 
 #' This function offers the possibility to do so and also allows you to add new items to your project
 #' 
-#' @param db handle to a Dexter project database
+#' @param db a connection to a dexter project database
 #' @param rules A data frame with columns \code{item_id}, \code{response}, and \code{item_score}.
 #' The order is not important but spelling is. Any other columns will be ignored. See details
 #' @return If the scoring rules pass a sanity check, a small summary of changes is printed and nothing is returned
@@ -227,8 +243,6 @@ keys_to_rules = function(keys, include_NA_rule = FALSE)
 #' less_than_two_scores: if TRUE, the item has only one distinct score
 #' duplicated_responses: if TRUE, the item contains two or more identical response categories
 #' min_score_not_zero: if TRUE, the minimum score of the item was not 0
-#' Please note that the sanity check is done for the items you change
-
 #' @details 
 #' The rules should contain all rules that you want to change or add. This means that in case of a key error
 #' in a single multiple choice question, you typically have to change two rules.
@@ -243,9 +257,7 @@ keys_to_rules = function(keys, include_NA_rule = FALSE)
 #' 
 touch_rules = function(db, rules)
 {
-  # for backward compatibility we rename if necessary
-  names(rules)[names(rules)=='item'] = 'item_id'
-  names(rules)[names(rules)=='score'] = 'item_score'
+  check_df(rules, c('item_id','response','item_score'))
   
   if(any(is.na(rules$item_id)) || any(is.na(rules$item_score)))
     stop("The item_id and item_score columns may not contain NA values")
@@ -264,7 +276,7 @@ touch_rules = function(db, rules)
   # with the existing rules so it has to be gotten out of the way
   items_with_duplicate_options = unique(rules[duplicated(select(rules,.data$item_id,.data$response)),]$item_id)
 
-  existing_rules = dbGetQuery(db, 'SELECT item_id, response, item_score FROM dxScoring_rules;')
+  existing_rules = dbGetQuery(db, 'SELECT item_id, response, item_score FROM dxscoring_rules;')
   # remove the no-ops
   rules = dplyr::setdiff(rules, existing_rules)
   
@@ -303,15 +315,17 @@ touch_rules = function(db, rules)
   {
     if(nrow(new_rules)>0)
     {
-      new_items = setdiff(new_rules$item_id, dbGetQuery(db, 'SELECT item_id FROM dxItems;')$item_id)
-      if(length(new_items)>0) dbExecute(db,'INSERT INTO dxItems(item_id) VALUES(:id);', tibble(id=new_items))
-      dbExecute(db,'INSERT INTO dxScoring_rules(item_id, response, item_score) 
+      new_items = setdiff(new_rules$item_id, dbGetQuery(db, 'SELECT item_id FROM dxitems;')$item_id)
+      if(length(new_items)>0) 
+        dbExecute_param(db,'INSERT INTO dxitems(item_id) VALUES(:id);', tibble(id=new_items))
+      
+      dbExecute_param(db,'INSERT INTO dxscoring_rules(item_id, response, item_score) 
 							                            VALUES(:item_id, :response, :item_score);', 
 				select(new_rules, .data$item_id, .data$response, .data$item_score))
     }
     if(nrow(amended_rules)>0) 
     {
-      dbExecute(db,'UPDATE dxScoring_rules SET item_score=:item_score 
+      dbExecute_param(db,'UPDATE dxscoring_rules SET item_score=:item_score 
                       WHERE item_id=:item_id AND response=:response;', 
                 select(amended_rules, .data$item_id, .data$response, .data$item_score))
     }
@@ -325,7 +339,7 @@ touch_rules = function(db, rules)
 #' Add item response data in long or wide format
 #'
 #'
-#' @param db A handle to the database, i.e. the output of \code{start_new_project}
+#' @param db a connection to a dexter database, i.e. the output of \code{start_new_project}
 #' or \code{open_project}
 #' @param x A data frame containing the responses and, optionally,
 #' person_properties. The data.frame should have one row per respondent and the column names should 
@@ -340,7 +354,7 @@ touch_rules = function(db, rules)
 #' assumed to have a score of 0.
 #' @return A list with information about the recent import.
 #' 
-#' @details It is a common practice to keep respons data in tables where each row 
+#' @details It is a common practice to keep response data in tables where each row 
 #' contains the responses from a single person. \code{add_booklet} is provided to input
 #' data in that form, one booklet at a time. 
 #'
@@ -387,14 +401,14 @@ touch_rules = function(db, rules)
 #' 
 add_booklet = function(db, x, booklet_id, auto_add_unknown_rules = FALSE) {
   
+  check_df(x)
+  x = mutate_if(x, is.factor, as.character) 
   
-  x = x %>% mutate_if(is.factor, as.character) 
-  
-  covariates = intersect(dbListFields(db, 'dxPersons'), tolower(names(x)))
-  covariates = covariates[covariates != 'person_id']
+  person_properties = intersect(dbListFields(db, 'dxpersons'), tolower(names(x)))
+  person_properties = person_properties[person_properties != 'person_id']
   
   design = tibble(booklet_id = booklet_id, item_id = names(x), col_order=c(1:ncol(x))) %>%
-    inner_join(dbGetQuery(db, "SELECT item_id FROM dxItems;"), by='item_id') %>%
+    inner_join(dbGetQuery(db, "SELECT item_id FROM dxitems;"), by='item_id') %>%
     mutate(item_position = dense_rank(.data$col_order)) %>%
     select(-.data$col_order)
 
@@ -402,24 +416,23 @@ add_booklet = function(db, x, booklet_id, auto_add_unknown_rules = FALSE) {
 
   dbTransaction(db,{
     out = list()
-    if (dbExists(db,'SELECT 1 FROM dxBooklets WHERE booklet_id=:b;',tibble(b=booklet_id)) ) 
+    if (dbExists(db,'SELECT 1 FROM dxbooklets WHERE booklet_id=:b;',tibble(b=booklet_id)) ) 
     {
-      if(!df_identical(dbGetQuery(db,'SELECT item_id
-                                      FROM dxBooklet_design
-                                      WHERE booklet_id=:b
-                                     ORDER BY item_position;', tibble(b=booklet_id)),
-                    tibble(item_id = design$item_id)))
+      if(!df_identical(dbGetQuery_param(db,
+              'SELECT item_id FROM dxbooklet_design WHERE booklet_id=:b ORDER BY item_position;', 
+              tibble(b=booklet_id)),
+           tibble(item_id = design$item_id)))
       {
         stop("There is already a booklet with this ID which has different items or a different item order")
       }
     } else
     {  
-      dbExecute(db,'INSERT INTO dxBooklets(booklet_id) VALUES(:booklet_id);',list(booklet_id=booklet_id))
-      if('testpart_nbr' %in% dbListFields(db, 'dxBooklet_design'))
+      dbExecute_param(db,'INSERT INTO dxbooklets(booklet_id) VALUES(:booklet_id);',list(booklet_id=booklet_id))
+      if('testpart_nbr' %in% dbListFields(db, 'dxbooklet_design'))
       {
-        dbExecute(db,'INSERT INTO dxTestparts(booklet_id) VALUES(:booklet_id);',list(booklet_id=booklet_id))
+        dbExecute_param(db,'INSERT INTO dxtestparts(booklet_id) VALUES(:booklet_id);',list(booklet_id=booklet_id))
       }
-      dbExecute(db,'INSERT INTO dxBooklet_design(booklet_id, item_id, item_position) 
+      dbExecute_param(db,'INSERT INTO dxbooklet_design(booklet_id, item_id, item_position) 
                           VALUES(:booklet_id,:item_id,:item_position);', 
 				select(design, .data$booklet_id,.data$item_id,.data$item_position))
     }
@@ -432,14 +445,14 @@ add_booklet = function(db, x, booklet_id, auto_add_unknown_rules = FALSE) {
       message("no column `person_id` provided, automatically generating unique person id's")
     } else
     {
-      known_people = dbGetQuery(db,'SELECT person_id FROM dxPersons;')$person_id
+      known_people = dbGetQuery(db,'SELECT person_id FROM dxpersons;')$person_id
       new_people = setdiff(x$person_id,known_people)
     }
                   
-    dbExecute(db,'INSERT INTO dxPersons(person_id) VALUES(:person_id);', tibble(person_id=new_people))
+    dbExecute_param(db,'INSERT INTO dxpersons(person_id) VALUES(:person_id);', tibble(person_id=new_people))
     # double admin, double items, etc.
     
-    dbExecute(db,'INSERT INTO dxAdministrations(person_id,booklet_id) VALUES(:person_id,:booklet_id);', 
+    dbExecute_param(db,'INSERT INTO dxadministrations(person_id,booklet_id) VALUES(:person_id,:booklet_id);', 
               select(x,.data$person_id, .data$booklet_id))
           
     responses = x[,c(design$item_id, "booklet_id", "person_id")] %>%
@@ -449,14 +462,14 @@ add_booklet = function(db, x, booklet_id, auto_add_unknown_rules = FALSE) {
     responses$response[is.na(responses$response)] = 'NA'
                   
     
-    existing_rules = dbGetQuery(db, "SELECT item_id, response FROM dxScoring_rules;")
+    existing_rules = dbGetQuery(db, "SELECT item_id, response FROM dxscoring_rules;")
     rules = responses[,c('item_id', 'response')]
     new_rules = rules[!duplicated(rbind(existing_rules, rules))[-seq_len(nrow(existing_rules))], ]
     
     if (nrow(new_rules)>0 && auto_add_unknown_rules) 
     {
-		  dbExecute(db,
-				'INSERT INTO dxScoring_rules(item_id,response,item_score) VALUES(:item_id,:response,0);',
+		  dbExecute_param(db,
+				'INSERT INTO dxscoring_rules(item_id,response,item_score) VALUES(:item_id,:response,0);',
 				select(new_rules, .data$item_id, .data$response))
       out$zero_rules_added = new_rules
     } else if(nrow(new_rules)>0) 
@@ -465,25 +478,25 @@ add_booklet = function(db, x, booklet_id, auto_add_unknown_rules = FALSE) {
       as.data.frame(new_rules) %>% print(row.names=FALSE)
       stop('unknown responses')
     }
-    dbExecute(db,'INSERT INTO dxResponses(booklet_id,person_id,item_id,response) 
+    dbExecute_param(db,'INSERT INTO dxresponses(booklet_id,person_id,item_id,response) 
                                 VALUES(:booklet_id,:person_id,:item_id,:response);', 
 					select(responses, .data$booklet_id, .data$person_id, .data$item_id, .data$response))
             
     # make this report before we mutilate the colnames  
     columns_ignored = setdiff(names(x), c(design$item_id,'person_id','item_id','booklet_id') )
-    columns_ignored = columns_ignored[!tolower(columns_ignored) %in% covariates]
+    columns_ignored = columns_ignored[!tolower(columns_ignored) %in% person_properties]
                   
-    # add covariates
-    if(length(covariates)>0)
+    # add person_properties
+    if(length(person_properties)>0)
     {
       colnames(x) = tolower(colnames(x))
-      dbExecute(db,paste0('UPDATE dxPersons SET ',paste0(covariates,'=:',covariates,collapse=','),' WHERE person_id=:person_id;'),
-                               x[,c(covariates,'person_id')])
+      dbExecute_param(db,paste0('UPDATE dxpersons SET ',paste0(person_properties,'=:',person_properties,collapse=','),' WHERE person_id=:person_id;'),
+                               x[,c(person_properties,'person_id')])
     }
   }) 
   
   out$items = design$item_id
-  out$person_properties = covariates
+  out$person_properties = person_properties
   if( length(columns_ignored) > 0)
     out$columns_ignored = columns_ignored
 
@@ -493,10 +506,10 @@ add_booklet = function(db, x, booklet_id, auto_add_unknown_rules = FALSE) {
 #' @rdname add_booklet 
 add_response_data = function(db, data, auto_add_unknown_rules = FALSE, missing_value = 'NA')
 {
-  data = ungroup(data)
   colnames(data) = tolower(colnames(data))
-  if(length(setdiff(c('item_id', 'person_id', 'response','booklet_id'), colnames(data))) > 0)
-    stop("The data argument must contain the columns: 'item_id', 'person_id', 'response','booklet_id'") 
+  check_df(data, c('item_id', 'person_id', 'response','booklet_id'))
+
+  data = ungroup(data)
   
   data$person_id = as.character(data$person_id)
   data$item_id = as.character(data$item_id)
@@ -504,9 +517,10 @@ add_response_data = function(db, data, auto_add_unknown_rules = FALSE, missing_v
   data$response = as.character(data$response)
   
   missing_value = as.character(missing_value)
-
+  check_string(missing_value)
+  
   unknown_items = distinct(data, .data$item_id) %>%
-    anti_join(dbGetQuery(db, 'SELECT DISTINCT item_id FROM dxItems;'), by='item_id')
+    anti_join(dbGetQuery(db, 'SELECT DISTINCT item_id FROM dxitems;'), by='item_id')
   
   if(nrow(unknown_items) > 0)
   {
@@ -520,19 +534,19 @@ add_response_data = function(db, data, auto_add_unknown_rules = FALSE, missing_v
     user_booklets = distinct(data, .data$booklet_id)
     
     known_booklets = user_booklets %>%
-      inner_join(dbGetQuery(db, 'SELECT booklet_id FROM dxBooklets;'), by='booklet_id')
+      inner_join(dbGetQuery(db, 'SELECT booklet_id FROM dxbooklets;'), by='booklet_id')
     
     unknown_booklets = anti_join(user_booklets, known_booklets, by='booklet_id')
     
     if(nrow(unknown_booklets) > 0)
     {
-      dbExecute(db,'INSERT INTO dxBooklets(booklet_id) VALUES(:booklet_id);',unknown_booklets)
+      dbExecute_param(db,'INSERT INTO dxbooklets(booklet_id) VALUES(:booklet_id);',unknown_booklets)
       if('item_position' %in% colnames(data))
       {
         data %>%
           distinct(.data$booklet_id, .data$item_id, .data$item_position) %>%
           inner_join(unknown_booklets, by='booklet_id') %>%
-          dbExecute(db, 'INSERT INTO dxBooklet_design(booklet_id, item_id, item_position) 
+          dbExecute_param(db, 'INSERT INTO dxbooklet_design(booklet_id, item_id, item_position) 
                           VALUES(:booklet_id, :item_id, :item_position);', .)
       } else
       {
@@ -542,7 +556,7 @@ add_response_data = function(db, data, auto_add_unknown_rules = FALSE, missing_v
           group_by(.data$booklet_id) %>%
           mutate(item_position = dense_rank(.data$item_id)) %>%
           ungroup() %>%
-          dbExecute(db, 'INSERT INTO dxBooklet_design(booklet_id, item_id, item_position) 
+          dbExecute_param(db, 'INSERT INTO dxbooklet_design(booklet_id, item_id, item_position) 
                           VALUES(:booklet_id, :item_id, :item_position);', .)
       } 
     }
@@ -550,7 +564,7 @@ add_response_data = function(db, data, auto_add_unknown_rules = FALSE, missing_v
     design_mismatch = data %>%
       distinct(.data$booklet_id, .data$item_id) %>%
       inner_join(known_booklets, by='booklet_id') %>%
-      anti_join(dbGetQuery(db, 'SELECT booklet_id, item_id FROM dxBooklet_design;'), 
+      anti_join(dbGetQuery(db, 'SELECT booklet_id, item_id FROM dxbooklet_design;'), 
                 by=c('booklet_id','item_id'))
     
     if(nrow(design_mismatch) > 0)
@@ -567,14 +581,14 @@ add_response_data = function(db, data, auto_add_unknown_rules = FALSE, missing_v
     # fill in missings
     persons = distinct(data, .data$person_id)
     
-    new_persons = anti_join(persons, dbGetQuery(db, 'SELECT person_id FROM dxPersons;'), by='person_id')
+    new_persons = anti_join(persons, dbGetQuery(db, 'SELECT person_id FROM dxpersons;'), by='person_id')
     if(nrow(new_persons) > 0)
-      dbExecute(db, 'INSERT INTO dxPersons(person_id) VALUES(:person_id);', new_persons)
+      dbExecute_param(db, 'INSERT INTO dxpersons(person_id) VALUES(:person_id);', new_persons)
     
     admin = distinct(data, .data$person_id, .data$booklet_id)
 
     existing_admin = admin %>%
-      inner_join(dbGetQuery(db,'SELECT person_id, booklet_id FROM dxAdministrations;'), by=c('person_id','booklet_id'))
+      inner_join(dbGetQuery(db,'SELECT person_id, booklet_id FROM dxadministrations;'), by=c('person_id','booklet_id'))
 
     if(nrow(existing_admin) > 0)
     {
@@ -583,24 +597,25 @@ add_response_data = function(db, data, auto_add_unknown_rules = FALSE, missing_v
       stop('double administrations')
     }
     
-    dbExecute(db, 'INSERT INTO dxAdministrations(person_id, booklet_id) VALUES(:person_id, :booklet_id);', admin)
+    dbExecute_param(db, 'INSERT INTO dxadministrations(person_id, booklet_id) VALUES(:person_id, :booklet_id);', 
+                    admin)
 
     data = admin %>%
-      inner_join(dbGetQuery(db, 'SELECT booklet_id, item_id FROM dxBooklet_design;'), by='booklet_id') %>%
+      inner_join(dbGetQuery(db, 'SELECT booklet_id, item_id FROM dxbooklet_design;'), by='booklet_id') %>%
       left_join(data, by=c('person_id','booklet_id','item_id')) %>%
       mutate(response = if_else(is.na(.data$response), missing_value, .data$response)) %>%
       select(.data$person_id, .data$booklet_id, .data$item_id, .data$response)
 
     unknown_responses = distinct(data, .data$item_id, .data$response) %>%
-      anti_join(dbGetQuery(db, 'SELECT DISTINCT item_id, response FROM dxScoring_rules;'), 
+      anti_join(dbGetQuery(db, 'SELECT DISTINCT item_id, response FROM dxscoring_rules;'), 
                 by=c('item_id','response'))
     
     if(nrow(unknown_responses)>0) 
     {
       if(auto_add_unknown_rules)
       {
-        dbExecute(db,
-                  'INSERT INTO dxScoring_rules(item_id,response,item_score) VALUES(:item_id,:response,0);',
+        dbExecute_param(db,
+                  'INSERT INTO dxscoring_rules(item_id,response,item_score) VALUES(:item_id,:response,0);',
                   unknown_responses)
       } else
       {
@@ -610,9 +625,9 @@ add_response_data = function(db, data, auto_add_unknown_rules = FALSE, missing_v
       }
     }
     
-    n = dbExecute(db, 'INSERT INTO dxResponses (person_id, booklet_id, item_id, response) 
-                    VALUES(:person_id, :booklet_id, :item_id, :response);', 
-              data)
+    n = dbExecute_param(db, 
+        'INSERT INTO dxresponses (person_id, booklet_id, item_id, response) 
+                    VALUES(:person_id, :booklet_id, :item_id, :response);', data)
   })
   cat(paste(n,'responses imported.\n'))
   
@@ -624,7 +639,7 @@ add_response_data = function(db, data, auto_add_unknown_rules = FALSE, missing_v
 #' Add, change or define item properties in a dexter project
 #'
 #'
-#' @param db A handle to the dexter project database, e.g. the output of \code{start_new_project}
+#' @param db a connection to a dexter database, e.g. the output of \code{start_new_project}
 #' or \code{open_project}
 #' @param item_properties A data frame containing a column item_id (matching item_id's already defined in the project)
 #'  and 1 or more other columns with item properties (e.g. item_type, subject)
@@ -654,7 +669,10 @@ add_response_data = function(db, data, auto_add_unknown_rules = FALSE, missing_v
 add_item_properties = function(db, item_properties=NULL, default_values=NULL) {
   
   # for convenience we include the item_id as a property
-  existing_item_properties = dbListFields(db, 'dxItems') 
+  existing_item_properties = dbListFields(db, 'dxitems') 
+  
+  check_df(item_properties, 'item_id', nullable=TRUE)
+  check_list(default_values, nullable=TRUE)
   
   dbTransaction(db, 
   {
@@ -669,7 +687,7 @@ add_item_properties = function(db, item_properties=NULL, default_values=NULL) {
       for(prop_name in new_prop_names)
       {
         dbExecute(db, 
-                  paste0("ALTER TABLE dxItems ADD COLUMN ",
+                  paste0("ALTER TABLE dxitems ADD COLUMN ",
                          prop_name, 
                          sql_col_def(default_values[[prop_name]], TRUE, db),';'))
       }
@@ -679,15 +697,18 @@ add_item_properties = function(db, item_properties=NULL, default_values=NULL) {
     if(!is.null(item_properties))
     {
       colnames(item_properties) = dbValid_colnames(colnames(item_properties))
+      
       item_properties = item_properties %>%
         mutate(item_id = as.character(.data$item_id)) %>%
         mutate_if(is.factor, as.character) 
       
-     
-       # backwards compatibility
-      if(!('item_id' %in% colnames(item_properties)))
-        colnames(item_properties)[colnames(item_properties)=='item'] = 'item_id'
-      
+      if(inherits(db,'SQLiteConnection'))
+      {
+        item_properties = item_properties %>%
+          mutate_if(is.date, format, "%Y-%m-%d") %>%
+          mutate_if(is.time, format, "%Y-%m-%d %H:%M:%S")
+      }
+
       if(!('item_id' %in% colnames(item_properties)))
         stop('item_properties needs to have a column item_id')
       
@@ -697,16 +718,16 @@ add_item_properties = function(db, item_properties=NULL, default_values=NULL) {
       for(prop_name in new_prop_names)
       {
         dbExecute(db, 
-                paste0("ALTER TABLE dxItems ADD COLUMN ", 
+                paste0("ALTER TABLE dxitems ADD COLUMN ", 
                        prop_name, 
                        sql_data_type(pull(item_properties, prop_name)),";"))
       }
       pnames = names(item_properties)[names(item_properties)!='item_id']
       
-      n = dbExecute(db,
-                    paste0('UPDATE dxItems SET ',paste0(pnames,'=:',pnames,collapse=', '),
-                           ' WHERE item_id=:item_id;'),
-                    item_properties)
+      n = dbExecute_param(db,
+            paste0('UPDATE dxitems SET ',paste0(pnames,'=:',pnames,collapse=', '),
+                      ' WHERE item_id=:item_id;'),
+            item_properties)
       cat(paste(length(pnames), 'item properties for', n, 'items added or updated\n'))
     }
   })
@@ -720,7 +741,7 @@ add_item_properties = function(db, item_properties=NULL, default_values=NULL) {
 #' also be automatically imported with \code{\link{add_booklet}}
 #'
 #'
-#' @param db A handle to the dexter project database, e.g. the output of \code{start_new_project}
+#' @param db a connection to a dexter database, e.g. the output of \code{start_new_project}
 #' or \code{open_project}
 #' @param person_properties A data frame containing a column person_id and 1 or more other columns with 
 #' person properties (e.g. education_type, birthdate)
@@ -732,13 +753,15 @@ add_item_properties = function(db, item_properties=NULL, default_values=NULL) {
 #' can only be defined once for each person_property
 #' 
 #' @return nothing
-add_person_properties = function(db, person_properties = NULL, default_values = list())
+add_person_properties = function(db, person_properties = NULL, default_values = NULL)
 {
+  check_df(person_properties, 'person_id', nullable=TRUE)
+  check_list(default_values, nullable=TRUE)
   dbTransaction(db, 
   { 
-    existing_props = dbListFields(db, 'dxPersons')
+    existing_props = dbListFields(db, 'dxpersons')
     
-    if(length(default_values) > 0)
+    if(!is.null(default_values))
     {
       names(default_values) = dbValid_colnames(names(default_values))
       
@@ -746,7 +769,7 @@ add_person_properties = function(db, person_properties = NULL, default_values = 
   
       for(prop_name in setdiff(names(default_values), existing_props))
       {
-        dbExecute(db, paste0("ALTER TABLE dxPersons ADD COLUMN ",prop_name, sql_col_def(default_values[[prop_name]], TRUE, db),';'))
+        dbExecute(db, paste0("ALTER TABLE dxpersons ADD COLUMN ",prop_name, sql_col_def(default_values[[prop_name]], TRUE, db),';'))
       }
       cat(paste(length(setdiff(names(default_values), existing_props)),"new person_properties defined\n"))
       existing_props = union(existing_props, names(default_values))
@@ -759,17 +782,25 @@ add_person_properties = function(db, person_properties = NULL, default_values = 
       
       dbCheck_reserved_colnames(setdiff(colnames(person_properties), existing_props))
       
+      if(inherits(db,'SQLiteConnection'))
+      {
+        person_properties = person_properties %>%
+          mutate_if(is.date, format, "%Y-%m-%d") %>%
+          mutate_if(is.time, format, "%Y-%m-%d %H:%M:%S")
+      }
+      
+      
       lapply(setdiff(colnames(person_properties), existing_props), function(prop_name)
       {
-        dbExecute(db, paste0("ALTER TABLE dxPersons ADD COLUMN ",
+        dbExecute(db, paste0("ALTER TABLE dxpersons ADD COLUMN ",
                              prop_name, 
                              sql_col_def(pull(person_properties, prop_name), FALSE, db),';'))
       })
       
       pnm = setdiff(colnames(person_properties),'person_id')
       
-      n = dbExecute(db, 
-                    paste('UPDATE dxPersons SET', paste0(pnm, '=:', pnm, collapse = ','),
+      n = dbExecute_param(db, 
+                    paste('UPDATE dxpersons SET', paste0(pnm, '=:', pnm, collapse = ','),
                               'WHERE person_id=:person_id;'),
                     person_properties)
       
@@ -785,12 +816,12 @@ add_person_properties = function(db, person_properties = NULL, default_values = 
 #' 
 #' Retrieve the scoring rules currently present in the dexter project db
 #' 
-#' @param db handle to a Dexter project database
+#' @param db a connection to a Dexter database
 #' @return data.frame of scoring rules containing columns: item_id, response, item_score
 #' 
 get_rules = function(db)
 {
-  dbGetQuery(db, 'SELECT item_id, response, item_score FROM dxScoring_rules ORDER BY item_id, response;')
+  dbGetQuery(db, 'SELECT item_id, response, item_score FROM dxscoring_rules ORDER BY item_id, response;')
 }
 
 
@@ -798,79 +829,52 @@ get_rules = function(db)
 #'
 #' Retrieve information about the booklets entered in the db so far
 #'
-#' @param db A handle to the database, i.e. the output of \code{start_new_project}
+#' @param db a connection to a dexter database, i.e. the output of \code{start_new_project}
 #' or \code{open_project}
 #' @return A data frame with columns: booklet_id, n_persons and n_items.
 #'
 get_booklets = function(db) {
-  dbGetQuery(db, 'SELECT dxBooklets.*, n_items, n_persons FROM dxBooklets 
-                    INNER JOIN dxBooklet_stats USING(booklet_id) ORDER BY booklet_id; ')
-}
-
-
-#' Item properties in a project
-#'
-#' Quickly glimpse the item properties defined in the project (if any).
-#'
-#' @param db A handle to the database, i.e. the output of \code{start_new_project}
-#' or \code{open_project}
-#' @return A tibble with columns: item_property, type and values. Values shows
-#' unique values for your item properties, cut off if there are many.
-#'
-get_item_properties = function(db) {
-  data = dbGetQuery(db, 'SELECT * FROM dxItems;')
-  if(nrow(data) > 0 && ncol(data) > 1)
-  {
-    vartypes = lapply(data, class)
-    vartypes = tibble(item_property = names(vartypes), type = unlist(vartypes))
-    
-    data %>%
-      gather(key='item_property', value='value', -.data$item_id) %>%
-      group_by(.data$item_property) %>%
-      summarise(values = paste(unique(.data$value), collapse=', ')) %>%
-      ungroup() %>%
-      mutate(values = if_else(nchar(.data$values) > 100,
-                              paste0(substr(.data$values,1,100), '...'),
-                              .data$values)) %>%
-      inner_join(vartypes, by='item_property') %>%
-      select(.data$item_property, .data$type, .data$values) %>%
-      as.data.frame()
-  }
+  dbGetQuery(db, 'SELECT dxbooklets.*, n_items, n_persons FROM dxbooklets 
+                    INNER JOIN dxbooklet_stats USING(booklet_id) ORDER BY booklet_id; ')
 }
 
 
 
 
-
-#' Person properties in a project
-#'
-#' Quickly glimpse the person properties defined in the project (if any).
-#'
-#' @param db A handle to the database, i.e. the output of \code{start_new_project}
-#' or \code{open_project}
-#' @return A tibble with columns: person_property, type and values. Values shows unique values for your person properties, cut off if there are many.
-#'
-get_person_properties = function(db) {
-  data = dbGetQuery(db, 'SELECT * FROM dxPersons;')
-
-  if(nrow(data) > 0 && ncol(data) > 1)
-  {
-    vartypes = lapply(data, class)
-    vartypes = tibble(person_property = names(vartypes), type = unlist(vartypes))
-    
-    data %>%
-      gather(key='person_property', value='value', -.data$person_id) %>%
-      group_by(.data$person_property) %>%
-      summarise( values = paste(unique(.data$value), collapse=', ')) %>%
-      ungroup() %>%
-      mutate(values = if_else(nchar(.data$values) > 100,
-                              paste0(substr(.data$values,1,100), '...'),
-                              .data$values)) %>%
-      inner_join(vartypes, by='person_property') %>%
-      select(.data$person_property, .data$type, .data$values) %>%
-      as.data.frame()
-  }
+#' Variables that are defined in the project
+#' 
+#' Inspect the variables defined in your dexter project and their datatypes
+#' 
+#' @param db a dexter project database
+#' @return a data.frame with name and type of the variables defined in your dexter project
+#' @details 
+#' The variables in Dexter consist of the item properties and person properties you specified
+#' and a number of reserved variables that are automatically defined like \code{response} and \code{booklet_id}.
+#' 
+#' Variables in Dexter are most useful when used in predicate expressions. A number of functions can 
+#' take a dataSrc argument and an optional predicate. Predicates are 
+#' a concise and flexible way to filter data for the different psychometric functions in Dexter.
+#' 
+#' The variables can also be used to retrieve data in \code{\link{get_responses}}
+#' 
+get_variables = function(db)
+{
+  lapply(c('dxitems','dxbooklets','dxbooklet_design','dxscoring_rules',
+           'dxpersons','dxadministrations','dxresponses'),
+         function(tbl)
+         {
+           res = dbSendQuery(db,paste('SELECT * FROM',tbl,'WHERE 0=1;'))
+           r = dbColumnInfo(res)
+           dbClearResult(res)
+           r$originates = substring(tbl,3)
+           return(r)
+         }) %>% 
+    bind_rows() %>% 
+    distinct(.data$name,.keep_all=TRUE) %>%
+    filter(.data$name != 'testpart_nbr') %>%
+    arrange(.data$originates)
 }
+
 
 
 
@@ -880,12 +884,16 @@ get_person_properties = function(db) {
 #' so far together with the item properties
 #'
 #'
-#' @param db A handle to the database, i.e. the output of \code{start_new_project}
+#' @param db a connection to a dexter database, e.g. the output of \code{start_new_project}
 #' or \code{open_project}
 #' @return A data frame with column item_id and a column for each item property
 #'
-get_items = function(db){
-  dbGetQuery(db,'SELECT * FROM dxItems ORDER BY item_id;')
+get_items = function(db)
+{
+  if(is.list(db) && !is.null(db$inputs))
+    return(as.character(db$inputs$ssI$item_id))
+  
+  dbGetQuery(db,'SELECT * FROM dxitems ORDER BY item_id;')
 }
 
 
@@ -895,28 +903,30 @@ get_items = function(db){
 #' so far together with their properties
 #'
 #'
-#' @param db A handle to the database, i.e. the output of \code{start_new_project}
+#' @param db a connection to a dexter database, e.g. the output of \code{start_new_project}
 #' or \code{open_project}
 #' @return A data frame with columns person_id and columns for each person_property
 #'
 get_persons = function(db){
-  dbGetQuery(db,'SELECT * FROM dxPersons ORDER BY person_id;')
+  dbGetQuery(db,'SELECT * FROM dxpersons ORDER BY person_id;')
 }
 
 #' Provide test scores
 #'
-#' Supplies the weighted sum of item scores for each person selected.
+#' Supplies the sum of item scores for each person selected.
 #'
-#' @param dataSrc Data source: a dexter project db handle or a data.frame with columns: person_id, item_id, item_score
+#' @param dataSrc a connection to a dexter database, a matrix, or a data.frame with columns: person_id, item_id, item_score
 #' @param predicate An optional expression to filter data, if NULL all data is used
-#' @return A tibble with columns person_id, item_id, test_score
+#' @return A tibble with columns person_id, item_id, booklet_score
 #' 
-get_testscores = function(dataSrc, predicate=NULL) {
+get_testscores = function(dataSrc, predicate=NULL) 
+{
   qtpredicate = eval(substitute(quote(predicate)))
   env = caller_env()
-  get_resp_data(dataSrc, qtpredicate, env=env, summarised=TRUE)$x %>%
-    select(.data$person_id, .data$booklet_id, test_score=.data$sumScore) %>%
-    as.data.frame()
+  
+  get_resp_data(dataSrc, qtpredicate, summarised=TRUE, env=env)$x %>%
+    mutate_if(is.factor, as.character) %>%
+    df_format()
 }
 
 
@@ -926,60 +936,77 @@ get_testscores = function(dataSrc, predicate=NULL) {
 #' so far by booklet and position in the booklet
 #'
 #'
-#' @param db A handle to the database, i.e. the output of \code{start_new_project}
-#' or \code{open_project}
+#' @param dataSrc a dexter database or any object form which a design can be inferred
 #' @param format return format, see below
 #' @param rows variable that defines the rows, ignored if format='long'
 #' @param columns variable that defines the columns, ignored if format='long'
 #' @param fill If set, missing values will be replaced with this value, ignored if format='long'
 #' @return A data.frame with the design. The contents depend on the rows, columns and format parameters
-#'  if \code{format} is \code{'long'} a data.frame with columns: booklet_id, item_id, item_position
+#'  if \code{format} is \code{'long'} a data.frame with columns: booklet_id, item_id, item_position (if available)
 #'  if \code{format} is \code{'wide'} a data.frame with the rows defined by the \code{rows} parameter and 
 #'  the columns by the \code{columns} parameter, with the remaining variable (i.e. item_id, booklet_id or item_position)
 #'  making up the cells
 #'
-get_design = function(db, 
+get_design = function(dataSrc, 
                        format = c('long','wide'), 
                        rows = c('booklet_id','item_id','item_position'), 
                        columns = c('item_id','booklet_id','item_position'),
                        fill=NA)
 {
   
-  design = dbGetQuery(db,'SELECT booklet_id, item_id, item_position 
-                            FROM dxBooklet_design
-                              ORDER BY booklet_id, item_position;')
+  design = 
+    if(inherits(dataSrc, 'DBIConnection'))
+    {
+      dbGetQuery(dataSrc,'SELECT booklet_id, item_id, item_position 
+                            FROM dxbooklet_design
+                                ORDER BY booklet_id, item_position;')
+    } else if(inherits(dataSrc, 'list') && !is.null(dataSrc$inputs$design))
+    {
+      mutate_if(dataSrc$inputs$design[,c('booklet_id','item_id')], is.factor, as.character)
+    } else if(inherits(dataSrc, 'data.frame'))
+    {
+      colnames(dataSrc) = tolower(colnames(dataSrc))
+      dataSrc[,intersect(c('booklet_id','item_position','item_id'),colnames(dataSrc))] %>%
+        distinct() %>%
+        arrange_all()
+    } else
+    {
+      get_resp_data(dataSrc)$design %>%
+        distinct() %>%
+        arrange_all()
+    }
+  
+  
   format = match.arg(format)
   
   if(format == 'wide')
   {
+    if(!'item_position' %in% colnames(design))
+      stop('Cannot make wide format becasue item position is missing in input')
     rows = match.arg(rows)
     columns = match.arg(columns)
     if(rows == columns) stop('rows may not be equal to columns')
     val_col = setdiff(c('booklet_id','item_id','item_position'), c(rows, columns))
 
-        return(
-      design %>%
+    design %>%
         spread(key = columns, value = val_col, fill = fill) %>%
         arrange_at(rows) %>%
-        as.data.frame()
-    )
-    
+        df_format()
   } else
   {
-    return(design)
+    df_format(design)
   }
-
 }
 
 
 
-# to do: add a unit test
-# to do: recursive connection check can run out of the stack in extreme cases, make non-recursive throughout
+# to~do: add a unit test
+
 #' Information about the design
 #'
 #' This function is useful to inspect incomplete designs
 #'
-#' @param dataSrc Data source: a dexter project db handle or a data.frame with columns: person_id, item_id, item_score
+#' @param dataSrc a connection to a dexter database, a matrix, or a data.frame with columns: person_id, item_id, item_score
 #' @param predicate An optional expression to subset data, if NULL all data is used
 #' 
 #' 
@@ -988,7 +1015,7 @@ get_design = function(db,
 #' \describe{
 #' \item{design}{a data.frame with columns booklet_id, item_id, item_position, n_persons} 
 #' \item{connected_booklets}{a data.frame with columns booklet_id, group; 
-#' booklets with the same `group` are connected to eachother.} 
+#' booklets with the same `group` are connected to each other.} 
 #' \item{connected}{TRUE/FALSE indicating whether the design is connected or not} 
 #' \item{testlets}{a data.frame with columns item_id and testlet; items within the same testlet 
 #' always occur together in a booklet} 
@@ -1001,87 +1028,47 @@ design_info = function(dataSrc, predicate = NULL)
   out = list()
   qtpredicate = eval(substitute(quote(predicate)))
   env = caller_env()
-  
-  
-  
-  if(inherits(dataSrc,'dx_resp_data'))
-    dataSrc = dataSrc$x
-  
+
+  check_dataSrc(dataSrc)
+
+  # parms objects
+  if(inherits(dataSrc,'list') && !is.null(dataSrc$inputs$design))
+    dataSrc = dataSrc$inputs$design
+
   if(inherits(dataSrc, 'data.frame'))
+    colnames(dataSrc) = tolower(colnames(dataSrc))
+  
+  if(inherits(dataSrc, 'data.frame') && !('person_id'%in% colnames(dataSrc)))
   {
-    cn = colnames(dataSrc) = tolower(colnames(dataSrc))
+    # perhaps a design was supplied
+    out$design = dataSrc %>%
+      distinct(.data$booklet_id, .data$item_id, .keep_all=TRUE)
     
-    if(!('item_position' %in% cn))
-      dataSrc$item_position = 0L
-    
-    
-    if(length(intersect(c('person_id','item_id'),cn)) == 2)
-    {
-      if(!'item_score' %in% cn)
-        dataSrc$item_score = 0L
-      
-      out$design = get_resp_data(dataSrc, qtpredicate, env=env, extra_columns = 'item_position')$x %>%
-        group_by(.data$booklet_id, .data$item_id, .data$item_position) %>%
-        summarise(n_persons = n()) %>%
-        ungroup() 
-    } else if(length(intersect(c('booklet_id','item_id'),cn)) == 2)
-    {
-      # we silently allow a design as input
-      out$design = dataSrc %>%
-        distinct(.data$booklet_id, .data$item_id, .keep_all=TRUE) %>%
-        select(.data$booklet_id, .data$item_id, .data$item_position)
-      
-      out$design$n_persons = NA_integer_
-    } else
-    {
-      stop('dataSrc needs to contain columns person_id, item_id, item_score')
-    }
-    
-  } else if(inherits(dataSrc, 'DBIConnection'))
-  {
-    out$design = db_get_design(dataSrc, qtpredicate=qtpredicate, env=env)
+    out$design = out$design[,intersect(colnames(out$design, c('booklet_id','item_id','item_position')))]
+    out$design$n_persons = NA_integer_
   } else
   {
-    stop("dataSrc must be of type 'DBIConnection' or 'data.frame'")
+    check_dataSrc(dataSrc)
+    if(inherits(dataSrc, 'DBIConnection'))
+    {
+      out$design = db_get_design(dataSrc, qtpredicate=qtpredicate, env=env)
+    } else
+    {
+      out$design = get_resp_data(dataSrc, qtpredicate, env=env)$x %>%
+        count(.data$booklet_id, .data$item_id, name='n_persons')
+    }
   }
-  
-  out$design = arrange(out$design, .data$booklet_id, .data$item_position, .data$item_id)    
-  
+
+  out$design = out$design %>%
+    arrange(.data$booklet_id, .data$item_id)  %>% 
+    mutate_if(is.factor, as.character) %>%
+    df_format()
+      
+    
   if(nrow(out$design) == 0 )
     stop("design is empty: no data selected")
-  
-  # connected parts
-  ds = out$design %>% 
-    inner_join(rename(out$design, booklet2 = 'booklet_id'), by = 'item_id') %>%
-    distinct(.data$booklet_id, .data$booklet2) 
-  
-  bkl = sort(unique(out$design$booklet_id))
-  
-  adjm = matrix(0L, nrow = length(bkl), ncol = length(bkl), dimnames = list(bkl, bkl))
-  adjm[as.matrix(ds)] = 1L
-  
-  visited = vector(length = ncol(adjm))
-  grp = vector(mode = 'integer', length = ncol(adjm))
-  dfs = function(start)
-  {
-    if(visited[start]) return(0L)
-    visited[start] <<- TRUE
-    vapply((1:ncol(adjm))[adjm[,start]>0], dfs, 0L)
-    0L
-  } 
-  
-  while(!all(visited))
-  {
-    dfs(min(which(!visited)))
-    grp[grp == 0 & visited] = max(grp) + 1L
-  }
-  
-  out$connected_booklets = tibble(booklet_id = bkl, group = grp) %>% 
-    arrange(.data$group, .data$booklet_id) %>%
-    as.data.frame()
-  
-  out$connected = (max(grp) == 1)
-  
+    
+ 
   #testlets
   out$testlets = out$design %>%
     mutate(bnr = dense_rank(.data$booklet_id)) %>%
@@ -1090,50 +1077,119 @@ design_info = function(dataSrc, predicate = NULL)
     ungroup() %>%
     mutate(testlet = dense_rank(.data$testlet)) %>%
     arrange(.data$testlet, .data$item_id) %>%
-    as.data.frame()
+    df_format()
   
   
-  # to do: I don't see why the diagonals should be zero, check in igraph if this matters
+  # to~do: I don't see why the diagonals should be zero, check in igraph if this matters
   # network
   out$adj_matrix = list()
   
   items = as.matrix(table(out$design$item_id, out$design$booklet_id))
   out$adj_matrix$weighted_by_items = crossprod(items, items)
-  diag(out$adj_matrix$weighted_by_items) = 0
+  mode(out$adj_matrix$weighted_by_items) = 'integer'
+  diag(out$adj_matrix$weighted_by_items) = 0L
+  
   
   b = out$design %>% 
     distinct(.data$booklet_id, .keep_all=TRUE)
   ww = outer(b$n_persons, b$n_persons, "+")
   out$adj_matrix$weighted_by_persons = out$adj_matrix$weighted_by_items * ww    
+
+  
+  
+  out$connected_booklets = tibble(booklet_id = colnames(out$adj_matrix$weighted_by_items), 
+                                  group = ds_connected_groups(out$adj_matrix$weighted_by_items)) %>% 
+    df_format()
+  out$connected = (max(out$connected_booklets$group) == 1)
+  
   
   out
 }
 
 
-# To be removed in version 1.0 #
 
-#' Deprecated test design functions
-#'
-#' These functions have been replaced by \code{\link{design_info}}
+# datasets
+
+
+
+#' Verbal aggression data
 #' 
-#' @param dataSrc Data source: a dexter project db handle or a data.frame with columns: person_id, item_id, item_score
-#' @param predicate An optional expression to subset data, if NULL all data is used
-#' @param weights obsolete
-#' @param design obsolete
+#' A data set of self-reported verbal behaviour in different frustrating
+#' situations (Vansteelandt, 2000)
 #' 
-design_as_network = function(dataSrc, predicate = NULL, weights=c("items","responses"))
-{
-  stop('this function has been replaced by `design_info()`, type `?design_info` for details')
-}  
+#' 
+#' @name verbAggrData
+#' @docType data
+#' @format A data set with 316 rows and 26 columns.
+#' @keywords datasets
+NULL
 
 
-#' @rdname design_as_network
-design_is_connected = function(design)
-{
-  stop('this function has been replaced by `design_info()`, type `?design_info` for details')
-}
+#' Scoring rules for the verbal aggression data
+#' 
+#' A set of (trivial) scoring rules for the verbal 
+#' aggression data set
+#' 
+#' 
+#' @name verbAggrRules
+#' @docType data
+#' @format A data set with 72 rows and 3 columns (item_id, response, item_score).
+#' @keywords datasets
+NULL
 
 
+#' Item properties in the verbal aggression data
+#' 
+#' A data set of item properties related to the verbal
+#' aggression data
+#' 
+#' 
+#' @name verbAggrProperties
+#' @docType data
+#' @format A data set with 24 rows and 5 columns.
+#' @keywords datasets
+NULL
+
+
+#' Rated data
+#' 
+#' A data set with rated data. A number of student performances are rated twice on several
+#' aspects by independent judges. The ratings are binary and have been summed following
+#' the theory discussed by Maris and Bechger (2006, Handbook of Statistics). Data are a
+#' small subset of data collected on the State Exam Dutch as a second language for Speaking. 
+#' 
+#' 
+#' 
+#' @name ratedData
+#' @docType data
+#' @format A data set with 75 rows and 15 columns.
+#' @keywords datasets
+NULL
+
+
+#' Scoring rules for the rated data
+#' 
+#' A set of (trivial) scoring rules for the rated data set
+#' 
+#' 
+#' @name ratedDataRules
+#' @docType data
+#' @format A data set with 42 rows and 3 columns (item_id, response, item_score).
+#' @keywords datasets
+NULL
+
+
+#' Item properties in the rated data
+#' 
+#' A data set of item properties related to the rated data. These are the aspects: 
+#' IH = content, WZ = word choice and phrasing, and WK = vocabulary.
+#' 
+#' 
+#' @name ratedDataProperties
+#' @docType data
+#' @format A data set with 14 rows and 2 columns: item_id and aspect
+#' @keywords datasets
+NULL
 
 
 

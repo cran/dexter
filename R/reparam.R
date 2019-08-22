@@ -13,12 +13,12 @@ remove_zero = function(a,b,first,last)
   if (is.vector(b)) b=b[-first]
   a=a[-first]
   new_first=first
-  new_last=last-1
+  new_last=last-1L
   for (i in 2:length(first))
   {
     ncat=last[i]-first[i]
-    new_first[i]=new_last[i-1]+1
-    new_last[i]=new_first[i]+ncat-1
+    new_first[i]=new_last[i-1]+1L
+    new_last[i]=new_first[i]+ncat-1L
   }
   return(list(a = a, b = b, first=new_first, last=new_last))
 }
@@ -27,18 +27,18 @@ remove_zero = function(a,b,first,last)
 add_zero = function(a, b, first,last)
 {
   new_first=first[1]
-  new_last=last[1]+1
+  new_last=last[1]+1L
   if (length(first)>1)
   {
     for (i in 2:length(first))
     {
       nn=last[i]-first[i]
-      new_first[i]=new_last[i-1]+1
-      new_last=c(new_last,new_first[i]+nn+1)
+      new_first[i]=new_last[i-1]+1L
+      new_last=c(new_last,new_first[i]+nn+1L)
     }
   }
-  new_a=vector("numeric",length(a)+length(first))
-  new_b=vector("numeric",length(a)+length(first))
+  new_a = integer(length(a)+length(first))
+  new_b = double(length(a)+length(first))
   new_a[-new_first]=a 
   new_b[new_first]=1
   new_b[-new_first]=b
@@ -220,3 +220,100 @@ toDexter <- function(beta, a, first, last, re_normalize=TRUE)
   parms = list(est=est, inputs=inputs)
   return(parms)
 }
+
+
+#####################
+# Some functions to transform user-provided (i.e., fixed) parameter values from one 
+# parameterization to the other.
+#####################
+beta2eta <-function(first, last, parms.df, out.zero=TRUE, in.zero=FALSE)
+{
+  df.new = parms.df
+  df.new$eta = beta2eta_(df.new$item_score, df.new$beta, first, last)
+  if (out.zero!=in.zero)
+  {
+    if (in.zero) df.new = parms.df[-first,] # zero in but not out
+    if (out.zero) # zero out but not in
+    {
+      tmp = add_zero(parms.df$item_score, parms.df$b, first, last)
+      df.new = data.frame(item_id = rep("i",length(tmp$a)), item_score = tmp$a, 
+                          beta = rep(0,length(tmp$a)), eta = rep(0,length(tmp$a)),
+                          stringsAsFactors = FALSE)
+      for (i in 1:length(tmp$first))
+      {
+        df.new$item_id[tmp$first[i]:tmp$last[i]] = parms.df$item_id[first[i]]
+        df.new$beta[(tmp$first[i]+1):tmp$last[i]] = parms.df$beta[first[i]:last[i]]
+        df.new$eta[(tmp$first[i]+1):tmp$last[i]] = parms.df$eta[first[i]:last[i]]
+      }
+    }
+  }
+  return(df.new)
+}
+
+beta2b <-function(first, last, parms.df, out.zero=TRUE, in.zero=FALSE)
+{
+  df.new = parms.df
+  df.new$b = eta2b_(beta2eta_(df.new$item_score, df.new$beta, first, last))
+  if (out.zero!=in.zero)
+  {
+    if (in.zero) df.new = parms.df[-first,] # zero in but not out
+    if (out.zero) # zero out but not in
+    {
+      tmp = add_zero(df.new$item_score, df.new$b, first, last)
+      df.new = data.frame(item_id = rep("i",length(tmp$a)), item_score = tmp$a, 
+                          beta = rep(0,length(tmp$a)), b = tmp$b,
+                          stringsAsFactors = FALSE)
+      for (i in 1:length(tmp$first))
+      {
+        df.new$item_id[tmp$first[i]:tmp$last[i]] = parms.df$item_id[first[i]]
+        df.new$beta[(tmp$first[i]+1):tmp$last[i]] = parms.df$beta[first[i]:last[i]]
+      }
+    }
+  }
+  return(df.new)
+}
+
+eta2b <-function(first, last, parms.df, out.zero=TRUE, in.zero=FALSE)
+{
+  df.new = parms.df
+  df.new$b = eta2b_(df.new$eta)
+  if (out.zero!=in.zero)
+  {
+    if (in.zero) df.new = parms.df[-first,] # zero in but not out
+    if (out.zero) # zero out but not in
+    {
+      tmp = add_zero(df.new$item_score, df.new$b, first, last)
+      df.new = data.frame(item_id = rep("i",length(tmp$a)), item_score = tmp$a, 
+                          eta = rep(0,length(tmp$a)), b = tmp$b,
+                          stringsAsFactors = FALSE)
+      for (i in 1:length(tmp$first))
+      {
+        df.new$item_id[tmp$first[i]:tmp$last[i]] = parms.df$item_id[first[i]]
+        df.new$eta[(tmp$first[i]+1):tmp$last[i]] = parms.df$eta[first[i]:last[i]]
+      }
+    }
+  }
+  return(df.new)
+}
+
+b2b <-function(first, last, parms.df, out.zero=TRUE, in.zero=TRUE)
+{
+  df.new=parms.df
+  if (out.zero!=in.zero)
+  {
+    if (in.zero) df.new = parms.df[-first,] # zero in but not out
+    if (out.zero) # zero out but not in
+    {
+      tmp = add_zero(parms.df$item_score, parms.df$b, first, last)
+      df.new = data.frame(item_id = rep("i",length(tmp$a)), item_score = tmp$a, 
+                          b = tmp$b, stringsAsFactors = FALSE)
+      for (i in 1:length(tmp$first))
+      {
+        df.new$item_id[tmp$first[i]:tmp$last[i]] = parms.df$item_id[first[i]]
+        df.new$eta[(tmp$first[i]+1):tmp$last[i]] = parms.df$eta[first[i]:last[i]]
+      }
+    }
+  }
+  return(df.new)
+}
+

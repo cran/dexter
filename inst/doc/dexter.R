@@ -10,13 +10,19 @@ par_hook = function(before, options, envir)
   }
 }
 knit_hooks$set(par = par_hook)
+options(dexter.progress=FALSE)
+
 
 ## ---- message=FALSE------------------------------------------------------
+library(dplyr)
 library(dexter)
 head(verbAggrRules, 10)
 
-## ------------------------------------------------------------------------
-db = start_new_project(verbAggrRules, "verbAggression.db", person_properties=list(gender="unknown"))
+## ---- eval=FALSE---------------------------------------------------------
+#  db = start_new_project(verbAggrRules, "verbAggression.db", person_properties=list(gender="unknown"))
+
+## ---- include=FALSE------------------------------------------------------
+db = start_new_project(verbAggrRules, ":memory:", person_properties=list(gender="unknown"))
 
 ## ------------------------------------------------------------------------
 add_booklet(db, verbAggrData, "agg")
@@ -30,8 +36,8 @@ head(verbAggrProperties)
 ## ------------------------------------------------------------------------
 get_booklets(db)
 get_items(db)
-get_item_properties(db)
-get_person_properties(db)
+get_persons(db) %>% 
+  glimpse()
 
 ## ------------------------------------------------------------------------
 tt = tia_tables(db)
@@ -67,6 +73,12 @@ parms = fit_enorm(db)
 
 ## ---- results='hide'-----------------------------------------------------
 parms_gibbs = fit_enorm(db, method='Bayes')
+
+## ---- eval=F-------------------------------------------------------------
+#  head(coef(parms_gibbs))
+
+## ---- echo=F-------------------------------------------------------------
+kable(head(coef(parms_gibbs)), digits=3)
 
 ## ------------------------------------------------------------------------
 pv = plausible_values(db, parms)

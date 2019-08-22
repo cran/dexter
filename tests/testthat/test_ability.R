@@ -15,8 +15,8 @@ test_that('inconsistencies between data and parms are handled correctly',{
   
   # params must cover all item, item_score combinations 
   expect_no_error({p1 = ability(db,f1)})
-  expect_error({p2 = ability(db,f2)}, regexp='items.+parameters')
-  expect_error({p3 = ability(db,f3)}, regexp='item_scores.+parameters')
+  expect_error({p2 = ability(db,f2)}, regexp='parameters.+items')
+  expect_error({p3 = ability(db,f3)}, regexp='parameters.+scores')
   
   # of course the reverse is not necessary
   expect_no_error({p4 = ability(db,f1,item_score !=2 )})
@@ -34,7 +34,7 @@ test_that('verbAgg abilities are monotone increasing', {
   expect_lt(
     ability_tables(f) %>%
       filter(is.finite(theta)) %>%
-      mutate(error = abs(sumScore - es(theta))) %>%
+      mutate(error = abs(booklet_score - es(theta))) %>%
       pull(error) %>%
       mean(),
     0.001,
@@ -57,7 +57,7 @@ test_that('verbAgg abilities are monotone increasing', {
       
       abl = abl %>%  
         filter(is.finite(theta)) %>%
-        arrange(sumScore) %>%
+        arrange(booklet_score) %>%
         mutate(p = lag(theta, default = -Inf)) %>%
         filter(theta < p)
   
@@ -85,7 +85,7 @@ test_that('different estimation methods of ability converge on a large dataset',
     prior = eval(formals(ability_tables)$prior)
     
     # run ability for each available method
-    est = Reduce(function(a,b){inner_join(a,b,by=c('booklet_id','sumScore'))},
+    est = Reduce(function(a,b){inner_join(a,b,by=c('booklet_id','booklet_score'))},
             apply(expand.grid(meth, prior),1,function(m)
             {
               expect_no_error({abl = ability_tables(f, method = m[1], prior=m[2])}, info=paste('ability pisa -', m[1], m[2]))

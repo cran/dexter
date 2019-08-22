@@ -1,3 +1,20 @@
+
+
+elsym <- function(b,a,first,last,i1=0,i2=0)
+{
+  n = length(first)
+  ms = as.integer(sum(a[last]))
+  g = double(ms+1L)
+  
+  ElSym_C(b, a, as.integer(first-1L), as.integer(last-1L), 
+          as.integer(i1-1L), as.integer(i2-1L), n, ms, g)
+
+  return(g)
+}
+
+
+  
+
 ######################################################################
 # Estimation of Rasch and Interaction Model 
 #######################################################################
@@ -6,23 +23,25 @@
 # @returns:
 #      bRM:    Parameter estimates of the Rasch model
 #      bIM:    Parameter estimates of the Interaction model
-#      cIM:    Estimate of (log-)interaction parameter
+#      cIM:    Estimate of (exp-)interaction parameter
 #      cRM:    Interaction parameters under the Rasch model: all equal to 1
-#      HRM:    Block diag. Asymptotic var-covvar matrix of item parameters under RM
-#     se.c:   Standard error of interaction parameter
-# fit.stat: log(cIM)/se.c. Wald statistic normally distributed under Rasch model
+#      HRM:    Block diag. Asymptotic var-covar matrix of item parameters under RM
+#     se.sigma:   Standard error of interaction parameter
+# fit.stat: log(cIM)/se.sigma. Wald statistic normally distributed under Rasch model
 #########################################################################
+# future~to~d0: switch to ittotmat mean if overflow, use full Hessian
 
-EstIM  <- function(first,last, nCat, a, sufI, sufC, scoretab) {
-
+EstIM  <- function(first,last, nCat, a, sufI, sufC, scoretab, regs=FALSE) {
+  
   C = rep(1:length(first), nCat)
   
   m=sum(scoretab) ##
   nI=length(last)
   b=rep(0,length(sufI))
   ic=rep(1,nI)
-  var.ic=vector("numeric", nI)
-  HRM=matrix(0,length(b),length(b))
+  var.ic = double(nI)
+  #HRM=matrix(0,length(b),length(b))
+  HIM = vector("list", nI)
   
   # Identification
   b[sufI>0]=1
@@ -34,16 +53,17 @@ EstIM  <- function(first,last, nCat, a, sufI, sufC, scoretab) {
     upd_set[[i]]=(first[i]:last[i])[upd_set[[i]]]
   }
   
-  if (check_trivial_scores_(ittotmat0(b,ic[C],a,first,last),scoretab)){
-    warning("Only trivial weighted scores observed") }
-  
+  ps = possible_scores(a, first, last)
+  # see actual scores, do: (1:length(ps)-1L)[as.logical(ps)]
+ 
   converged=2
   scale=2
+
   while(converged>0.01)
   {
     converged=-1
-    pi_mat=ittotmat0(b,ic[C],a,first,last) ##
-    pi_mat[is.na(pi_mat)]=0
+    pi_mat = ittotmat0(b,ic[C],a,first,last, ps)
+    
     for (i in 1:nI)
     {
       if (length(upd_set[[i]])>0)
@@ -56,8 +76,8 @@ EstIM  <- function(first,last, nCat, a, sufI, sufC, scoretab) {
         # NR update for parameters of item i
         update=solve(H*scale,E)
         b[upd_set[[i]]]=b[upd_set[[i]]]*exp(update)
-        converged=max(converged,max(abs(E))/m) #
-        HRM[upd_set[[i]],upd_set[[i]]]=H
+        converged=pmax(converged,max(abs(E))/m) #
+        #HRM[upd_set[[i]],upd_set[[i]]]=H
       }
     }
     if (converged<1) scale=1
@@ -69,11 +89,17 @@ EstIM  <- function(first,last, nCat, a, sufI, sufC, scoretab) {
   ## IM
   converged=2
   scale=2
+  first_iter = TRUE
   while(converged>0.001)
   {
     converged=-1
-    pi_mat=ittotmat0(b,ic[C],a,first,last)
-    pi_mat[is.na(pi_mat)]=0
+    pi_mat = ittotmat0(b,ic[C],a,first,last, ps) 
+
+    if(first_iter)
+    {
+      first_iter = FALSE
+      ctrRM = pi_mat
+    }
     for (i in 1:nI)
     {
       # gradient and hessian for thresholds of item i
@@ -87,6 +113,7 @@ EstIM  <- function(first,last, nCat, a, sufI, sufC, scoretab) {
         # gradient and hessian for interaction parameter
         ncol_pi = ncol(pi)
         nrow_pi = nrow(pi)
+        s_range = 0:(ncol_pi-1)
         
         E = c(E, sufC[i])
         H = cbind(H, rep.int(0, nrow(H)))
@@ -94,156 +121,144 @@ EstIM  <- function(first,last, nCat, a, sufI, sufC, scoretab) {
         k = 1
         e0 = 0; e1 = 0
         f = matrix(0, nrow_pi, ncol_pi)
-        g = matrix(0, nrow_pi, ncol_pi)
         h = 0
         for (j in upd_set[[i]])
         {
-          E[length(E)]=E[length(E)]-a[j]*sum((0:(ncol_pi-1))*scoretab*pi[k,])
+          E[length(E)]=E[length(E)]-a[j]*sum(s_range*scoretab*pi[k,])
           e0=e0+a[j]*pi[k,]
           e1=e1+a[j]^2*pi[k,]
-          f[k,]=a[j]*(0:(ncol_pi-1))*pi[k,]
-          g[k,]=pi[k,]
-          h=h+a[j]*(0:(ncol_pi-1))*pi[k,]
+          f[k,]=a[j]*s_range*pi[k,]
+          h=h+f[k,]
           k=k+1
         }
-        H[nrow(H),nrow(H)]=sum((0:(ncol_pi-1))^2*(e1-e0^2)*scoretab)
+        H[nrow(H),nrow(H)]=sum(s_range^2*(e1-e0^2)*scoretab)
         for (k in 1:nrow(f))
         {
-          H[k,nrow(H)]=sum((f[k,]-g[k,]*h)*scoretab)
+          H[k,nrow(H)]=sum((f[k,]-pi[k,]*h)*scoretab)
           H[nrow(H),k]=H[k,nrow(H)]
         }
+        
+        
         # NR update for parameters of item i
-        update=solve(H*scale,E)
-        b[upd_set[[i]]]=b[upd_set[[i]]]*exp(update[-length(update)])
-        ic[i]=ic[i]*exp(update[length(update)])
-        var.ic[i]=solve(H)[nrow(H),nrow(H)]
-        converged=max(converged,max(abs(E))/m)
+        update = solve(H*scale,E)
+        b[upd_set[[i]]] = b[upd_set[[i]]]*exp(update[-length(update)])
+        ic[i] = ic[i]*exp(update[length(update)])
+        HIM[[i]] = H
+        var.ic[i] = solve(H)[nrow(H),nrow(H)]
+        converged = pmax(converged,max(abs(E))/m)
       }
     }
     if (converged<1) scale=1
   }
   
-  return(list(bRM=bRM,cRM=cRM,bIM=b,cIM=ic,se.c=sqrt(var.ic),HRM=HRM, fit.stats=log(ic)/sqrt(var.ic)))
+  sigma = log(ic)
+  sigma = sigma - mean(sigma)
+  ic = exp(sigma)
+  se.sigma = sqrt(var.ic)
+  fit.stats = log(ic)/se.sigma
+  
+  out = list(bRM=bRM,cRM=cRM,bIM=b,cIM=ic,se.sigma=se.sigma,HIM=HIM, fit.stats=fit.stats, possible_scores = (1:length(ps)-1L)[as.logical(ps)])
+  if(regs)
+  {
+    out$ctrRM = ctrRM
+    out$ctrIM = ittotmat0(b,ic[C],a,first,last, ps) 
+  }
+  # ###### test ####### #
+  #HH=H_IM(a, b, ic, first, last, sufI, sufC, scoretab, method="full")
+  #HR=solve(HH$Hessian)
+  #plot(fit.stats, log(ic)/sqrt(diag(HR)[last])); abline(0,1,lty=2)
+    # H_full = matrix(0, length(b), length(b))
+    # Grad_full = double(length(b))
+    # pi_s_full = matrix(0, length(b), length(scoretab))
+    # H_im(a,b,ic[C], as.integer(first-1L), as.integer(last-1L), sufI, sufC, scoretab, H_full, Grad_full, pi_s_full, FALSE)
+  # # # 
+    # plot(diag(solve(H_full))[last], diag(HR)[last]); abline(0,1,lty=2)
+    # H_diag = matrix(0, length(b), length(b))
+    # Grad_diag = double(length(b))
+    # pi_s_diag = matrix(0, length(b), length(scoretab))
+    # H_im(a,b,ic[C], as.integer(first-1L), as.integer(last-1L), sufI, sufC, scoretab, H_diag, Grad_diag, pi_s_diag, TRUE)
+    # plot(diag(solve(H_diag))[last], diag(HR)[last]); abline(0,1,lty=2)
+  #  for (i in 1:24){print(max(abs(H_diag[first[i]:last[i],first[i]:last[i]]-HIM[[i]])))}
+  # browser()
+  # ###### end test ####### #
+  out
 }
 
 
 
-##################################################### calibrate incomplete designs: 
-# CML
-# Bayes
-# Note: if you wish to use mean_Elsym. Replace g=elsym(b, a, booklet[[bl]]$first[-ii], booklet[[bl]]$last[-ii]) by
-#   g = mean_ElSym(b, a, booklet[[bl]]$first[-ii], booklet[[bl]]$last[-ii])
-#   lg1 = length(g) - 1
-#   g = g*choose(lg1, 0:lg1)
 
-#####################################################
 
-#### Bayes
-calibrate_Bayes = function(itemList, booklet, sufI, b, a, first, last, nIter, fixed_b=NULL, lambda_out=FALSE) 
+
+# a, first, last, sufI: all ordered by item_id, item_score. include 0 score
+# scoretab: data.frame(booklet_id, booklet_score, N), including scores with N=0, ordered by booklet_id, booklet_score
+# design: data.frame(booklet_id, item_id, first, last), ordered by booklet_id, first
+# fixed_b:  NUll: nothing fixed; 
+#           vector length of b with NA values for parameters that need to be estimated, b values for fixed 
+
+E_bkl = function(..., use_mean = FALSE)
 {
-  nb = length(booklet)
-  n = length(itemList)
-  y = rep(0, length(sufI))
-  z = NULL
-  bx = matrix(0, nIter, length(b))
-  lx=list()
-  if (lambda_out)
+  if(use_mean)
   {
-    length(lx)=nb
-    names(lx)=names(booklet)
-    for (bl in 1:nb) lx[[bl]]=matrix(0,nIter,sum(a[booklet[[bl]]$last])+1)
-  }
-  
-  pb = txtProgressBar(min=0, max=nIter)
-  for (iter in 1:nIter)
+    E_booklets_mean(...)[,1,drop=TRUE]
+  } else
   {
-    for (bl in 1:nb)
-    {
-      # data augmentation
-      g=elsym(b, a, booklet[[bl]]$first, booklet[[bl]]$last)
-      z[bl] = rgamma(1, shape=booklet[[bl]]$m, 
-                     rate=sum(g*booklet[[bl]]$lambda))
-      # update lambda
-      idx = which(g != 0.0)
-      booklet[[bl]]$lambda[idx] = rgamma(length(idx), shape=booklet[[bl]]$scoretab[idx]+0.1, 
-                                         rate=(g*z[bl])[idx]) # 1.1
-      booklet[[bl]]$lambda[-idx] = 0.0
-      # scale lambda such that g*lambda~scoretab
-      booklet[[bl]]$lambda[idx] = booklet[[bl]]$m*booklet[[bl]]$lambda[idx]/sum(g*booklet[[bl]]$lambda)
-      z[bl] = rgamma(1, shape=booklet[[bl]]$m, 
-                     rate=sum(g*booklet[[bl]]$lambda))
-    }
-    for (i in 1:n)
-    {
-      y[first[i]:last[i]] = 0.0
-      for (bl in itemList[[i]])
-      {
-        ii = which(booklet[[bl]]$first==first[i])
-        g = elsym(b, a, booklet[[bl]]$first[-ii], booklet[[bl]]$last[-ii])
-        for (j in first[i]:last[i])
-        {
-          if (a[j] == 0) y[j]=y[j]+z[bl]*sum(g*head(booklet[[bl]]$lambda,-a[last[i]]))
-          if ((a[j] != a[last[i]])&(a[j]!=0)) y[j]=y[j]+z[bl]*sum(g*head(tail(booklet[[bl]]$lambda,-a[j]),-(a[last[i]]-a[j])))
-          if (a[j] == a[last[i]]) y[j]=y[j]+z[bl]*sum(g*tail(booklet[[bl]]$lambda,-a[j]))
-        }
-      }
-      b[first[i]:last[i]] = rgamma(1+last[i]-first[i],shape=sufI[first[i]:last[i]]+1.1,
-                                   rate=y[first[i]:last[i]]) #1.1
-    }
-    # identify within items
-    for (i in 1:n)
-    {
-      range=first[i]:last[i]
-      b[range]=b[range]/b[first[i]]
-    }
-    
-    if (is.null(fixed_b))
-    {
-      f=b[2] 
-      b[-first] = b[-first]/(f^(a[-first]/a[2]))
-      # Lambda
-      for (bl in 1:nb) 
-      {
-        booklet[[bl]]$lambda = booklet[[bl]]$lambda*f^(0:sum(a[booklet[[bl]]$last]))
-        if (booklet[[bl]]$lambda[1]!=0) booklet[[bl]]$lambda = booklet[[bl]]$lambda/booklet[[bl]]$lambda[1]
-        if (lambda_out) lx[[bl]][iter,]=booklet[[bl]]$lambda
-      }
-    }else
-    {
-      fixed_set=which(!is.na(fixed_b))
-      b[fixed_set]=fixed_b[fixed_set]
-      if (lambda_out) { for (bl in 1:nb) lx[[bl]][iter,]=booklet[[bl]]$lambda }
-    }
-    b[is.nan(b)] = 1 # deal with items that are not in data
-    bx[iter,] = b
-    setTxtProgressBar(pb, value=iter)
+    E_booklets(...)[,1,drop=TRUE]
   }
-  close(pb)
-  
-  report=toOPLM(a,bx, first, last, H=NULL,fixed_b=fixed_b)
-  return(list(a=a, b=report$b_renorm,lambda=lx, beta=report$beta))
 }
 
-### Estimate lambda from CML
-## arguments first, last and scoretab are for specific booklet
-est_lambda <- function(b, a, first, last, scoretab)
+NR_bkl = function(..., use_mean = FALSE)
 {
-  ifelse(scoretab>0, scoretab/(elsym(b,a,first,last)*sum(scoretab)), NA) 
-}  
+  if(use_mean)
+  {
+    NR_booklets_mean(...)
+  } else
+  {
+    NR_booklets(...)
+  }
+  invisible(NULL)
+}
 
 
-#####################################################################
-### Do CML
-## Must be changed to handle the case where 0 categories does not occur
-## Or category-scores (a) are not increasing
-## If fixed_b is not NULL unfixed c.q. free parameters are NA
-## Note that fixed_b contains values in the dexter parametrisation (including 0 category)
 
-calibrate_CML <- function(booklet, sufI, a, first, last, nIter, fixed_b=NULL) {
-  nb = length(booklet)
+calibrate_CML <- function(scoretab, design, sufI, a, first, last, nIter, fixed_b=NULL) {
+  
+  
+  use_mean = FALSE
+  # perhaps this first part should be moved to fit_enorm
+  
+  # bookkeeping
+  # items per booklet
+  nib = design %>%
+    count(.data$booklet_id) %>%
+    arrange(.data$booklet_id) %>%
+    pull(.data$n)
+  
+  # number of score per booklet (max_score + 1)
+  nscore = scoretab %>%
+    count(.data$booklet_id) %>%
+    arrange(.data$booklet_id) %>%
+    pull(.data$n)
+  
+  # THESE ARE C INDEXED!
+  # one vector for all
+  bfirst = as.integer(design$first - 1L)
+  blast = as.integer(design$last - 1L)
+  
+  
+  nb = length(nib)
   ni = length(first)
-  EsufI = sufI
   max_nr_iter = 30
+  
+  max_par_bk = design %>% 
+    group_by(.data$booklet_id) %>%
+    summarise(npar=sum(.data$last - .data$first+1L)) %>%
+    pull(.data$npar) %>%
+    max() %>%
+    as.integer()
+  
+  # end bookkeeping
+  
+  pb = pg_bar(min=0, max=nIter)
   
   if (is.null(fixed_b)) # if no fixed parameters
   {
@@ -252,18 +267,24 @@ calibrate_CML <- function(booklet, sufI, a, first, last, nIter, fixed_b=NULL) {
     ## Implicit Equations  ###
     converged=FALSE
     iter=0
-    pb = txtProgressBar(min=0, max=nIter)
-    while ((!converged)&(iter<=nIter))
+    
+    while ((!converged) && (iter<=nIter))
     {
       iter=iter+1
-      EsufI[] = 0
-      for (bl in 1:nb)
+      EsufI = E_bkl(b, a, bfirst, blast, scoretab$N, nscore, nib, use_mean=use_mean)
+
+      converged=(max(abs(sufI-EsufI))/nn < 1e-04)
+      if(is.na(converged))
       {
-        EsufI = EsufI + E.STEP(b,a,booklet[[bl]]$first,booklet[[bl]]$last,booklet[[bl]]$scoretab) 
-      }
+        if(use_mean)
+          stop('problem cannot be computed')
+        # continue with the next iteration using elsym_mean
+        use_mean = TRUE
+        converged = FALSE
+        next
+      } 
       b = b*sufI/EsufI
-      converged=(max(abs(sufI-EsufI))/nn<1e-04)
-      setTxtProgressBar(pb, value=iter)
+      pb$tick()
     }
     ie_iter=iter
     if (!converged) warning(paste('Implicit Equations not Converged in',as.character(nIter),"iterations"))
@@ -281,21 +302,17 @@ calibrate_CML <- function(booklet, sufI, a, first, last, nIter, fixed_b=NULL) {
     
     
     ###  NR  ###
-    H=matrix(0,length(a),length(a))
+    H = matrix(0,length(a),length(a))
     converged=FALSE
     nr_iter=0
-    scale=1
+    scale=1#to~do: ask timo, scale does not do anything at all
     while ((!converged)&&(nr_iter<max_nr_iter))
     {
       iter=iter+1
       nr_iter=nr_iter+1
-      EsufI[] = 0
-      H[] = 0
-      for (bl in 1:nb)
-      {
-        EsufI = EsufI + E.STEP(b,a,booklet[[bl]]$first,booklet[[bl]]$last,booklet[[bl]]$scoretab) 
-        H     = H     + H.STEP(b,a,booklet[[bl]]$first,booklet[[bl]]$last,booklet[[bl]]$scoretab)
-      }
+
+      # sets EsufI and H to 0 and updates in place 
+      NR_bkl(b, a, bfirst, blast, scoretab$N, nscore, nib, max_par_bk, EsufI, H, use_mean=use_mean)
       # identify
       for (i in 1:ni)
       {
@@ -306,13 +323,23 @@ calibrate_CML <- function(booklet, sufI, a, first, last, nIter, fixed_b=NULL) {
       H[,ref_cat]=0
       H[ref_cat,ref_cat]=1
       EsufI[ref_cat]=sufI[ref_cat]
-      b = b*exp(solve(H*scale,sufI-EsufI))
-
+      
       converged=(max(abs(EsufI-sufI))/nn<1e-10)
-      setTxtProgressBar(pb, value=iter)
+      nb = try(b*exp(solve(H*scale,sufI-EsufI)))
+      
+      if(inherits(nb,'try-error') || is.na(converged))
+      {
+        if(use_mean)
+          stop('problem cannot be computed')
+        # continue with the next iteration using elsym_mean
+        use_mean = TRUE
+        converged = FALSE
+        next 
+      }
+      b = nb
+      pb$tick()
       if (nr_iter==2) scale=1
     }
-    close(pb)
     if (!converged) warning(paste('Newton-Raphson not Converged in',as.character(nr_iter),"iterations"))
   }else  ### if fixed parameters
   {
@@ -321,27 +348,35 @@ calibrate_CML <- function(booklet, sufI, a, first, last, nIter, fixed_b=NULL) {
     b=fixed_b
     ni_free=sum(is.na(fixed_b[last]))
     b[update_set]=1
-    nn=0
-    for (bl in 1:nb) nn=nn+booklet[[bl]]$m
-    nn=nn*ni_free
+    #nn=0
+    #for (bl in 1:nb) nn=nn+booklet[[bl]]$m
+    #nn=nn*ni_free
+    nn = ni_free * sum(scoretab$N)
     
     converged=FALSE
     iter=0
-    pb = txtProgressBar(min=0, max=nIter)
-    while ((!converged)&(iter<=nIter))
+    while ((!converged)&&(iter<=nIter))
     {
       iter=iter+1
-      EsufI[] = 0
-      for (bl in 1:nb)
-      {
-        EsufI = EsufI + E.STEP(b,a,booklet[[bl]]$first,booklet[[bl]]$last,booklet[[bl]]$scoretab) 
-      }
-      b[update_set] = b[update_set]*sufI[update_set]/EsufI[update_set]
+      EsufI = E_bkl(b, a, bfirst, blast, scoretab$N, nscore, nib, use_mean=use_mean)
+
       converged=(max(abs(sufI[update_set]-EsufI[update_set]))/nn<1e-04)
-      setTxtProgressBar(pb, value=iter)
+      
+      if(is.na(converged))
+      {
+        if(use_mean)
+          stop('problem cannot be computed')
+        # continue with the next iteration using elsym_mean
+        use_mean = TRUE
+        converged = FALSE
+        next
+      } 
+      
+      b[update_set] = b[update_set]*sufI[update_set]/EsufI[update_set]
+      pb$tick()
     }
     ie_iter=iter
-    if (!converged) warning(paste('Implicit Equations not Converged in',as.character(nIter),"iterations"))
+    if (!converged) warning(paste('Implicit Equations not Converged in',nIter,"iterations"))
     
     for (i in 1:ni)
     {
@@ -353,17 +388,14 @@ calibrate_CML <- function(booklet, sufI, a, first, last, nIter, fixed_b=NULL) {
     converged=FALSE
     nr_iter=0
     scale=1
-    while ((!converged)&(nr_iter<max_nr_iter))
+    while ((!converged)&&(nr_iter<max_nr_iter))
     {
       iter=iter+1
       nr_iter=nr_iter+1
-      EsufI[] = 0
-      H[] = 0
-      for (bl in 1:nb)
-      {
-        EsufI = EsufI + E.STEP(b,a,booklet[[bl]]$first,booklet[[bl]]$last,booklet[[bl]]$scoretab) 
-        H     = H     + H.STEP(b,a,booklet[[bl]]$first,booklet[[bl]]$last,booklet[[bl]]$scoretab)
-      }
+      
+      # sets EsufI and H to 0 and updates in place 
+      NR_bkl(b, a, bfirst, blast, scoretab$N, nscore, nib, max_par_bk, EsufI, H, use_mean=use_mean)
+      
       # identify
       for (i in 1:length(first))
       {
@@ -374,108 +406,99 @@ calibrate_CML <- function(booklet, sufI, a, first, last, nIter, fixed_b=NULL) {
       H[,fixed_set]=0
       diag(H)[fixed_set]=1
       EsufI[fixed_set]=sufI[fixed_set]
-      b = b*exp(solve(H*scale,sufI-EsufI))
+      
       converged=(max(abs(EsufI[update_set]-sufI[update_set]))/nn<1e-10)
-      setTxtProgressBar(pb, value=iter)
+      nb = try(b*exp(solve(H*scale,sufI-EsufI)))
+      
+      if(inherits(nb,'try-error') || is.na(converged))
+      {
+        if(use_mean)
+          stop('problem cannot be computed')
+        # continue with the next iteration using elsym_mean
+        use_mean = TRUE
+        converged = FALSE
+        next 
+      }
+      b = nb
+      
+      pb$tick()
       scale=1
     }
-    close(pb)
-    if (!converged) warning(paste('Newton-Raphson not Converged in',as.character(nr_iter),"iterations"))
+
+    if (!converged) warning(paste('Newton-Raphson not Converged in',nr_iter,"iterations"))
   }
+  pb$close()
+
+  lx = mapply(
+      function(bdes, bsct)
+      {
+        tibble(booklet_id = bdes$booklet_id[1],
+               score = bsct$booklet_score,
+               lambda = ifelse(bsct$N>0, bsct$N/(elsym(b,a,bdes$first,bdes$last)*sum(bsct$N)), NA_real_))
+      },
+      split(design, design$booklet_id),
+      split(scoretab, scoretab$booklet_id), 
+      SIMPLIFY=FALSE, USE.NAMES=FALSE) %>%
+    bind_rows()
   
-  lx=list()
-  length(lx)=nb
-  names(lx)=names(booklet)
-  for (bl in 1:nb) lx[[bl]]=est_lambda(b,a,booklet[[bl]]$first,booklet[[bl]]$last,booklet[[bl]]$scoretab)
   
   report = toOPLM(a, b, first, last, H=H, fixed_b=fixed_b)
   return(list(b=report$b_renorm, H=H, beta=report$beta, acov.beta=report$cov.beta, 
               lambda=lx, n_iter=iter, nr_iter = nr_iter, ie_iter=ie_iter))
 }
 
-#################################### Wrappers for C- FUnctions for CML
-## THis version uses Elsym and is adapted for inclusion of b_0. However
-## THere must still be a small error somewhere.
-H.STEP <- function(b,a,first,last,nscore)
+
+
+# scoretab: data.frame: booklet_id, booklet_score, N; ordered by booklet_id, booklet_score; N=0 included
+# design: data.frame: booklet_id, item_id, first, last; ordered by booklet_id, first
+# fixed_b: NULL or vector of length(b) with NA's for free parameters
+calibrate_Bayes = function(scoretab, design, sufI, a,b, first, last,  nIter, fixed_b=NULL)
 {
-  n=length(first)
-  ms=length(nscore)-1
-  output = double(length(b)^2)
-  tmp=.C("H",
-         as.double(b),
-         as.integer(a),
-         as.integer(length(b)),
-         as.integer(first-1),
-         as.integer(last-1),
-         as.integer(nscore),
-         as.integer(n),
-         as.integer(ms),
-         as.double(output))[[9]]
-  tmp=as.matrix(tmp)
-  dim(tmp)=c(length(b),length(b))
-  tmp=tmp+t(tmp)
-  diag(tmp)=diag(tmp)/2
-  return(tmp)
+  from = Gibbs.settings$from.cal; step = Gibbs.settings$step.cal
+  keep.which = seq(from,(from-step)*(from>step)+step*nIter,by=step)
+  nIter = max(keep.which)
+  
+  design = design %>%
+    mutate(bn = dense_rank(.data$booklet_id) - 1L) %>%
+    group_by(.data$bn) %>%
+    mutate(inr = dense_rank(.data$first) - 1L) %>%
+    ungroup() %>%
+    arrange(.data$first, .data$bn)
+  
+  bi = design$inr
+  ib = design$bn
+  
+  nbi = design %>% count(.data$first) %>% pull(.data$n)
+  nib = design %>% count(.data$bn) %>% arrange(.data$bn) %>% pull(.data$n)
+  
+  design = arrange(design,.data$bn)
+  
+  bfirst = as.integer(design$first -1L)
+  blast = as.integer(design$last -1L)
+  
+  bnscore = scoretab %>%
+    count(.data$booklet_id) %>%
+    arrange(.data$booklet_id) %>%
+    pull(.data$n)
+  
+  m = scoretab %>%
+    group_by(.data$booklet_id) %>%
+    summarize(m=sum(.data$N)) %>%
+    ungroup() %>%
+    arrange(.data$booklet_id) %>%
+    pull(.data$m)
+  
+  
+  fixed_b_vec = fixed_b
+  if(is.null(fixed_b))
+    fixed_b_vec = rep(NA_real_, length(b))
+  
+  
+  bx = calibrate_Bayes_C(as.integer(a), as.integer(first-1L), as.integer(last-1L),
+                         ib,bi,  nbi, nib, bfirst, blast, bnscore, m,
+                         sufI, scoretab$N, b, fixed_b_vec, as.integer(nIter))
+  bx = bx[keep.which,]
+  report = toOPLM(a,bx, first, last, H=NULL,fixed_b=fixed_b)
+  return(list(a=a, b=report$b_renorm,lambda=NULL, beta=report$beta))
 }
 
-## This version uses Elsym0... 
-H.STEP0 = function(b,a,first,last,nscore)
-{
-  first=first+1
-  n=length(first)
-  ms=length(nscore)-1
-  output = double(length(b)^2)
-  tmp=.C("H0",
-         as.double(b),
-         as.integer(a),
-         as.integer(length(b)),
-         as.integer(first-1),
-         as.integer(last-1),
-         as.integer(nscore),
-         as.integer(n),
-         as.integer(ms),
-         as.double(output))[[9]]
-  tmp=as.matrix(tmp)
-  dim(tmp)=c(length(b),length(b))
-  tmp=tmp+t(tmp)
-  diag(tmp)=diag(tmp)/2
-  return(tmp)
-}
-
-########################################
-# version with Elsym
-E.STEP <- function(b,a,first,last,nscore)
-{
-  n=length(first)
-  ms=length(nscore)-1
-  output = double(length(b)) 
-  tmp=.C("E",
-         as.double(b),
-         as.integer(a),
-         as.integer(first-1),
-         as.integer(last-1),
-         as.integer(nscore),
-         as.integer(n),
-         as.integer(ms),
-         as.double(output))[[8]]
-  return(tmp)
-}
-
-# version with Elsym0
-E.STEP0 <- function(b,a,first,last,nscore)
-{
-  first=first
-  n=length(first)
-  ms=length(nscore)-1
-  output = double(length(b)) 
-  tmp=.C("E0",
-         as.double(b),
-         as.integer(a),
-         as.integer(first-1),
-         as.integer(last-1),
-         as.integer(nscore),
-         as.integer(n),
-         as.integer(ms),
-         as.double(output))[[8]]
-  return(tmp)
-}

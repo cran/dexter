@@ -1,6 +1,6 @@
 ## ----setup, include=FALSE------------------------------------------------
 library(knitr)
-opts_chunk$set(echo = TRUE)
+opts_chunk$set(echo = TRUE, dev='CairoPNG')
 
 par_hook = function(before, options, envir)
 {
@@ -10,51 +10,37 @@ par_hook = function(before, options, envir)
   }
 }
 knit_hooks$set(par = par_hook)
-
+options(dexter.progress=FALSE)
 library(dexter)
+library(dplyr)
+library(tidyr)
 
-## ------------------------------------------------------------------------
-x_plus = 10
-delta = runif(20, -2, 2)
-repeat 
-{
-  abil = rnorm(1, 0, 1)
-  y_plus = 0
-  for (i in 1:20) y_plus = y_plus + 1*(rlogis(1, 0, 1) <= (abil-delta[i]))
-  if (x_plus == y_plus) break
-}
-pv = abil
-
-## ------------------------------------------------------------------------
-sim_Rasch = function(theta, delta) {
-  n = length(theta)
-  m = length(delta)
-  data.frame(
-    person_id = rep(paste0('p',1:n), m),
-    item_id = rep(paste0('i',1:m), each=n),
-    item_score = as.integer(rlogis(n*m, outer(theta, delta, "-")) > 0)
-  )
-}
-
-sim_Rasch(rnorm(5),c(-.5,0,.8))
+select = dplyr::select # fixes a weird bug
 
 ## ------------------------------------------------------------------------
 sim_PV = function(theta, delta) {
-  simulated_data = sim_Rasch(theta, delta) 
+  nit = length(delta)
+  sim_func = r_score( tibble(item_id=1:nit, item_score=1, delta=delta))
+  simulated_data = sim_func(theta)
   parms = fit_enorm(simulated_data)
-  plot(ecdf(theta-mean(theta)), main=paste(length(delta), "items"),bty='l')
   pv = plausible_values(simulated_data, parms, nPV = 10)
-  for (i in 1:10) lines(ecdf(pv[[i+3]]-mean(pv[[i+3]])), col=rgb(.7,.7,.7,.5))
+  
+  plot(x=c(min(theta)-.5, max(theta)+.5), y=0:1, 
+       main=paste(nit, "items"), bty='l', type='n',
+       xlab=bquote(theta), ylab = bquote(Fn(theta)))
+  
+  select(pv, starts_with('PV')) %>%
+    lapply(function(x) lines(ecdf(x-mean(x)), col=rgb(.7,.7,.7,.5)))
+
   lines(ecdf(theta-mean(theta)))
-  invisible(NULL)
 }
 
-## ----fig.align='center', results='hide',fig.height=4,fig.width=4---------
+## ----fig.align='center', fig.height=4,fig.width=4------------------------
 theta = rnorm(300)
 delta = runif(50, -2, 1)
 sim_PV(theta, delta)
 
-## ----fig.align='center', results='hide', fig.width=7,par=list(mfrow=c(1,1))----
+## ----fig.align='center',  fig.width=7------------------------------------
 grp = sample(2, 300, replace = TRUE, prob = c(.5,.5))
 theta = rnorm(300, mean = c(-2,2)[grp], sd = c(1,1)[grp])
 plot(density(theta),bty='l',main='')
@@ -65,10 +51,15 @@ sim_PV(theta, delta)
 
 ## ------------------------------------------------------------------------
 sim_PV2 = function(theta, delta) {
-  simulated_data = sim_Rasch(theta, delta) 
+  nit = length(delta)
+  sim_func = r_score( tibble(item_id=1:nit, item_score=1, delta=delta))
+  simulated_data = sim_func(theta)
   parms = fit_enorm(simulated_data, method="Bayes", nIterations = 50)
-  plot(ecdf(theta-mean(theta)), main=paste(length(delta), "items"),bty='l')
-  which.draw=5*(1:10)
+  
+  plot(x=c(min(theta)-.5, max(theta)+.5), y=0:1, main=paste(nit, "items"), bty='l', type='n',
+       xlab=bquote(theta), ylab = bquote(Fn(theta)))
+  
+  which.draw = 5*(1:10)
   for (iter in 1:10) {
     pv = plausible_values(simulated_data, parms, use_draw=which.draw[iter])
     lines(ecdf(pv$PV1-mean(pv$PV1)), col=rgb(.7,.7,.7,.5))
@@ -76,32 +67,37 @@ sim_PV2 = function(theta, delta) {
   lines(ecdf(theta-mean(theta)))
 }
 
-## ----make_pv2, results='hide',fig.align='center',fig.width=7, par=list(mfrow=c(1,3))----
+## ----make_pv2, fig.align='center',fig.width=7, par=list(mfrow=c(1,3))----
 sim_PV2(theta, delta[1:10])
 sim_PV2(theta, delta[1:20])
 sim_PV2(theta, delta)
 
-## ----make_pv3, results='hide',fig.align='center',fig.width=7,par=list(mfrow=c(1,3))----
-sim_Rasch2 = function(theta, delta,group) {
-  n = length(theta)
-  m = length(delta)
-  data.frame(
-    person_id = rep(paste0('p',1:n), m),
-    item_id = rep(paste0('i',1:m), each=n),
-    item_score = as.integer(rlogis(n*m, outer(theta, delta, "-")) > 0),
-    group=group
-  )
-}
+## ----make_pv3, fig.align='center',fig.width=7,par=list(mfrow=c(1,3))-----
 
 sim_PV3 = function(theta, delta, group) {
-  simulated_data = sim_Rasch2(theta, delta,group) 
+  nit = length(delta)
+  sim_func = r_score( tibble(item_id=1:nit, item_score=1, delta=delta))
+  simulated_data = sim_func(theta)
   parms = fit_enorm(simulated_data)
-  plot(ecdf(theta-mean(theta)), main=paste(length(delta), "items"),bty='l')
-  pv = plausible_values(simulated_data, parms, covariates="group", nPV = 10)
-  for (i in 1:10) lines(ecdf(pv[[i+3]]-mean(pv[[i+3]])), col=rgb(.7,.7,.7,.5))
+  
+  # because our data structure gets multi dimensional by the inclusion of groups
+  # we have to switch to a tidy format
+  simulated_data = simulated_data %>%
+    as_tibble() %>%
+    mutate(person_id=1:n(), group=group) %>%
+    gather(key='item_id', value='item_score', -person_id, -group)
+    
+  pv = plausible_values(simulated_data, parms, covariates='group',nPV = 10)
+  
+  plot(x=c(min(theta)-.5, max(theta)+.5), y=0:1, main=paste(nit, "items"), bty='l', type='n',
+       xlab=bquote(theta), ylab = bquote(Fn(theta)))
+  select(pv, starts_with('PV')) %>%
+    
+    lapply(function(x) lines(ecdf(x-mean(x)), col=rgb(.7,.7,.7,.5)))
+
   lines(ecdf(theta-mean(theta)))
-  invisible(NULL)
 }
+
 
 
 sim_PV3(theta, delta[1:10],grp)

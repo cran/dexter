@@ -7,7 +7,7 @@
 #' A typical use of this function is to generate plausible scores on
 #' a complete item bank when data is collected using an incomplete design
 #'
-#' @param dataSrc Data source: a dexter project db handle or a data.frame with columns: person_id, item_id, item_score
+#' @param dataSrc a connection to a dexter database, a matrix, or a data.frame with columns: person_id, item_id, item_score
 #' @param predicate an expression to filter data. If missing, the function will use 
 #' all data in dataSrc
 #' @param parms An object returned by function \code{fit_enorm} and containing
@@ -18,92 +18,120 @@
 #' @param covariates name or a vector of names of the variables to group the population, used to update the prior.
 #' A covariate must be a discrete person covariate (e.g. not a float) that indicates nominal categories, e.g. gender or school
 #' If dataSrc is a data.frame, it must contain the covariate.
-#' @param keep.observed In some cases, responses to one or more of the items have been observed. 
-#' The user can choose to keep these observations or generate new ones.
+#' @param keep.observed If responses to one or more of the items have been observed,
+#' the user can choose to keep these observations or generate new ones. 
 #' @param nPS Number of plausible testscores to generate per person.
-#' @return A data.frame with columns booklet_id, person_id, sumScore and nPS plausible scores
+#' @param merge_within_persons If a person took multiple booklets, this indicates
+#' whether plausible scores are generated per person (TRUE) or per booklet (FALSE)
+#' @return A data.frame with columns booklet_id, person_id, booklet_score and nPS plausible scores
 #' named PS1...PSn.
 #'  
-plausible_scores = function(dataSrc, parms=NULL, predicate=NULL, items=NULL, covariates=NULL, keep.observed=TRUE, nPS=1)
+plausible_scores = function(dataSrc, parms=NULL, predicate=NULL, items=NULL, 
+                            covariates=NULL, keep.observed=TRUE, nPS=1,merge_within_persons=FALSE)  
 {
   qtpredicate = eval(substitute(quote(predicate)))
   env = caller_env()
-  from = 20 ; by = 5
-  nIter_enorm = from + by*(nPS-1)
+  check_dataSrc(dataSrc)
+
+  plausible_scores_(dataSrc, parms=parms, qtpredicate=qtpredicate, items=items, covariates=covariates, 
+                    keep.observed=keep.observed, nPS=nPS, env=env,
+                    merge_within_persons=merge_within_persons) %>%
+    mutate_if(is.factor, as.character) %>%
+    df_format()
+}
+
+
+plausible_scores_ = function(dataSrc, parms=NULL, qtpredicate=NULL, items=NULL, 
+                             covariates=NULL, keep.observed=TRUE, nPS=1, env=NULL,
+                             merge_within_persons=FALSE)
+{
+  if (is.null(env))
+    env = caller_env()
   
-  respData = get_resp_data(dataSrc, qtpredicate, summarised = FALSE, extra_columns = covariates, env = env)
+  from = Gibbs.settings$from.ps ; step = Gibbs.settings$step.ps # from and step are burnin and thinning
+  keep.which = seq(from,(from-step)*(from>step)+step*nPS,by=step)
+  nPS.needed = max(keep.which) # Given from and step, this many PS must be generated
+
+  # if parms is null, parms check will be null
+  respData = get_resp_data(dataSrc, qtpredicate, summarised = FALSE, 
+                           extra_columns = covariates, env = env, 
+                           parms_check=parms$inputs$ssIS[,c('item_id','item_score')],
+                           merge_within_persons=merge_within_persons)
   
   # clean up items
-  if(is.null(items)) items = respData$design$item_id
-  if(inherits(items, 'data.frame')) items = items$item_id
-  items = unique(items)
+  if(is.null(items))
+  {
+    items = unique(respData$design$item_id)
+  }
+  else 
+  {
+    if(inherits(items, 'data.frame'))
+      items = items$item_id
+
+    items = ffactor(unique(as.character(items)), levels=levels(respData$design$item_id))
+    if(anyNA(items))
+      stop("Some items were not found in your dataSrc")
+  }    
   
   # if no parms, we calculate parms from the full data source
   # and we opt for a Bayesian approach
+
   if(is.null(parms))
   {
     use_b_matrix = TRUE
-    parms = fit_enorm_(respData, method='Bayes', nIterations = nIter_enorm)
-    b = parms$est$b[seq(from,(from-by)*(from>by)+by*nPS,by=by),]
+    nIter.enorm  = Gibbs.settings$from.pv + Gibbs.settings$step.pv*(nPS.needed-1) 
+    parms = fit_enorm_(respData, method='Bayes', nIterations = nIter.enorm)
+    b = parms$est$b
     if (is.vector(b)) dim(b)=c(1,length(b)) 
-  } else
-  {
-    if(length(setdiff(items, parms$inputs$ssI$item_id)) > 0)
-    {
-      message('The parms object does not contain parameter estimates for the following items')
-      print(setdiff(items, parms$inputs$ssI$item_id))
-      stop('Some items are without parameters')
-    }
-    
-    if (parms$inputs$method=='CML')
-    {
-      use_b_matrix = FALSE
-      b = parms$est$b
-    }else
-    {
-      if ( nrow(parms$est$b)>=nIter_enorm )#are there enough rows?
-      {
-        use_b_matrix=TRUE
-        b = parms$est$b[seq(from,(from-by)*(from>by)+by*nPS,by=by),]
-        if (is.vector(b)) dim(b)=c(1,length(b)) 
-      }else
-      {
-        use_b_matrix=FALSE
-        b = colMeans(parms$est$b)
-      }
-    }
-    # remove items from respdata for which we do not have parameters
-    # otherwise they will cause an error in plausible value computation
-
-    respData = semi_join(respData, parms$inputs$ssI, by='item_id', .recompute_sumscores = TRUE)
   }
   
+  if (parms$inputs$method=='CML')
+  {
+    use_b_matrix = FALSE
+    b = parms$est$b
+  } else 
+  {
+    if (nrow(parms$est$b) < nPS.needed) # are there enough samples ?
+    {
+      warning("Not enough posterior samples in fit_enorm for ", 
+              nPS, "plausible score. We continue using the posterior means")
+      use_b_matrix = FALSE
+      b = parms$est$b = colMeans(parms$est$b)
+      parms$inputs$method = 'CML'
+    } else
+    {
+      use_b_matrix = TRUE
+      b = parms$est$b
+    }
+  }
+ 
   a = parms$inputs$ssIS$item_score
   
-  # now we make plausible values using all responses we stil have
-  pv = plausible_values_(respData, parms = parms, covariates = covariates, nPV = nPS, 
-                         use_b_matrix = use_b_matrix)
+  # now we make plausible values using all responses we have
+  pv = plausible_values_(respData, parms = parms, covariates = covariates, nPV = nPS.needed)
 
-  #save the design since respData may be mutilated below
+  #save the full design since respData may be mutilated below
   design = respData$design
   
   # remove responses that are not part of the specified itemset and recompute
   if(length(intersect(respData$design$item_id, items)) == 0)
   {
-    pv = mutate(pv, sumScore = 0)
+    pv = mutate(pv, booklet_score = 0L)
   } else
   {
-    # since the sumscore in the plausible values is based on more responses than occur in the item set
+    # since the sumscore in the plausible values is (possibly) based on more responses than occur in the item set
     # we remove it in favor of the reduced testscores in the data
-    # if persons made 0 items in the selected set they get a testscore of 0
+    # if persons made 0 items in the selected set they get a testscore of 0 through the left join below
     
     respData = semi_join(respData, tibble(item_id=items), by='item_id', .recompute_sumscores = TRUE)
+    
     # summarise to one row per person
     respData = get_resp_data(respData, summarised = TRUE)
+    
     pv = pv %>% 
-      select(-.data$sumScore) %>%
+      select(-.data$booklet_score) %>%
       left_join(respData$x,  by=c("person_id", "booklet_id")) %>%
-      mutate(sumScore = coalesce(.data$sumScore, 0L))
+      mutate(booklet_score = coalesce(.data$booklet_score, 0L))
   }
 
   
@@ -117,7 +145,8 @@ plausible_scores = function(dataSrc, parms=NULL, predicate=NULL, items=NULL, cov
     # for those items that were NOT in a booklet
     # this can not be based on the parms, since parms can have different booklets than data(and thus pv)
     # so we base it on design
-    bkList = lapply(split(design, design$booklet_id), function(bk_items){ items %>% anti_join(bk_items, by='item_id') %>% arrange(.data$first)})
+    bkList = lapply(split(design, design$booklet_id), 
+                    function(bk_items){ items %>% anti_join(bk_items, by='item_id') %>% arrange(.data$first)})
 
 
     pv = pv %>%
@@ -126,27 +155,29 @@ plausible_scores = function(dataSrc, parms=NULL, predicate=NULL, items=NULL, cov
         bk = as.data.frame(bkList[[.$booklet_id[1]]])
         if(nrow(bk)==0)
         {
-          mutate_at(.,vars(starts_with('PV')),`<-`, .$sumScore )
+          mutate_at(.,vars(starts_with('PV')),`<-`, .$booklet_score )
         } else
         {
           # we generate a score on the unobserved items and add to the score on the observed items
-          cnt = counter$new()
-          mutate_at(.,vars(starts_with('PV')), rscore, b=b, a=a, first=bk$first, last=bk$last, cntr=cnt, use_b_matrix = use_b_matrix) %>%
-            mutate_at(vars(starts_with('PV')), `+`, .$sumScore)
+          cntr = (function(){i=0L; function(){i<<-i+1L; i}})()
+          mutate_at(.,vars(starts_with('PV')), rscore, b=b, a=a, first=bk$first, last=bk$last, cntr=cntr, use_b_matrix = use_b_matrix) %>%
+            mutate_at(vars(starts_with('PV')), `+`, .$booklet_score)
         }
       }) %>%
       ungroup()
   } else
   {
-    cnt = counter$new()
+    cnt =  (function(){i=0L;function(){i<<-i+1L;i}})()
     pv = pv %>%
       mutate_at(vars(starts_with('PV')), rscore, b=b, a=a, first=items$first,last=items$last,cntr=cnt, use_b_matrix = use_b_matrix)
   }
   
-  pv %>%
+  pv = pv %>%
     rename_at(vars(starts_with('PV')), function(x) sub('PV','PS', x)) %>%
-    select(-.data$sumScore) %>%
-    as.data.frame()
+    select(-.data$booklet_score) 
+  pv = pv[, c(1,2,keep.which+2)]
+  colnames(pv) = c('booklet_id','person_id', paste0('PS',1:nPS))
+  pv
 }
 
 
