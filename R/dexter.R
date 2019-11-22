@@ -2,7 +2,6 @@
 utils::globalVariables(c("."))
 
 
-
 #' Dexter: data analyses for educational and psychological tests.
 #' 
 #' Dexter provides a comprehensive solution for managing and analyzing educational test data.
@@ -76,33 +75,36 @@ start_new_project = function(rules, db_name="dexter.db", person_properties = NUL
   if(any(is.na(rules$item_id)) || any(is.na(rules$item_score)))
     stop("The item_id and item_score columns may not contain NA values")
   
-  
-  sanity = rules %>%
-    group_by(.data$item_id) %>%
-    summarise(less_than_two_scores = length(unique(.data$item_score))<2,
-              duplicated_responses = any(duplicated(.data$response)),
-              min_score_not_zero = min(.data$item_score)>0) %>%
-    filter(.data$less_than_two_scores | .data$duplicated_responses | .data$min_score_not_zero)
-
-  if (nrow(sanity)>0) {
-    message("There were problems with your scoring rules.\nCheck the output below for possible reasons.\n")
-    print(as.data.frame(sanity))
-    stop('Scoring rules are not valid')
-  } else 
+  if(NROW(rules)>0)
   {
-    if (inherits(db_name,'character'))
-    {
+	sanity = rules %>%
+		group_by(.data$item_id) %>%
+		summarise(less_than_two_scores = length(unique(.data$item_score))<2,
+				duplicated_responses = any(duplicated(.data$response)),
+				min_score_not_zero = min(.data$item_score)>0) %>%
+		filter(.data$less_than_two_scores | .data$duplicated_responses | .data$min_score_not_zero)
+
+    if (nrow(sanity)>0)
+	{
+      message("There were problems with your scoring rules.\nCheck the output below for possible reasons.\n")
+      print(as.data.frame(sanity))
+      stop('Scoring rules are not valid')
+	}
+  } 
+
+  if (inherits(db_name,'character'))
+  {
       check_string(db_name)
       if (file.exists(db_name) && !suppressWarnings({file.remove(db_name)}))
         stop('Could not overwrite file: ', db_name)
       
       db = dbConnect(SQLite(), db_name)
-    } else if(!inherits(db_name, 'DBIConnection'))
-    {
+  } else if(!is_db(db_name))
+  {
       stop('argument db_name must be a filename or a DBIconnection')
-    }
-    dbTransaction(db,
-    {
+  }
+  dbTransaction(db,
+  {
       project_CreateTables(db, person_properties)
       
       dbExecute_param(db,'INSERT INTO dxitems(item_id) VALUES(:id);', 
@@ -111,9 +113,9 @@ start_new_project = function(rules, db_name="dexter.db", person_properties = NUL
                 'INSERT INTO dxscoring_rules(item_id, response, item_score) 
                           VALUES(:item_id, :response, :item_score);', 
 				        rules)
-    },
-    on_error = function(e){dbDisconnect(db);stop(e)})
-  }
+  },
+  on_error = function(e){dbDisconnect(db);stop(e)})
+
   db
 }
 
@@ -152,7 +154,6 @@ open_project = function(db_name="dexter.db")
 close_project = function(db) dbDisconnect(db) 
 
 
-##################################
 #' Derive scoring rules from keys
 #'
 #' For multiple choice items that will be scored as 0/1, derive the
@@ -730,7 +731,7 @@ add_item_properties = function(db, item_properties=NULL, default_values=NULL) {
             item_properties)
       cat(paste(length(pnames), 'item properties for', n, 'items added or updated\n'))
     }
-  })
+  })# to do: message unknown items
 }
 
 
@@ -891,9 +892,9 @@ get_variables = function(db)
 get_items = function(db)
 {
   if(is.list(db) && !is.null(db$inputs))
-    return(as.character(db$inputs$ssI$item_id))
-  
-  dbGetQuery(db,'SELECT * FROM dxitems ORDER BY item_id;')
+    return(df_format(tibble(item_id=as.character(db$inputs$ssI$item_id))))
+
+  df_format(dbGetQuery(db,'SELECT * FROM dxitems ORDER BY item_id;'))
 }
 
 
@@ -955,7 +956,7 @@ get_design = function(dataSrc,
 {
   
   design = 
-    if(inherits(dataSrc, 'DBIConnection'))
+    if(is_db(dataSrc))
     {
       dbGetQuery(dataSrc,'SELECT booklet_id, item_id, item_position 
                             FROM dxbooklet_design
@@ -1049,7 +1050,7 @@ design_info = function(dataSrc, predicate = NULL)
   } else
   {
     check_dataSrc(dataSrc)
-    if(inherits(dataSrc, 'DBIConnection'))
+    if(is_db(dataSrc))
     {
       out$design = db_get_design(dataSrc, qtpredicate=qtpredicate, env=env)
     } else

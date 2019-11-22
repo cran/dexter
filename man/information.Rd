@@ -4,6 +4,7 @@
 \alias{information}
 \alias{expected_score}
 \alias{r_score}
+\alias{p_score}
 \title{Functions of theta}
 \usage{
 information(parms, items = NULL, booklet_id = NULL,
@@ -13,10 +14,12 @@ expected_score(parms, items = NULL, booklet_id = NULL,
   which.draw = NULL)
 
 r_score(parms, items = NULL, booklet_id = NULL, which.draw = NULL)
+
+p_score(parms, items = NULL, booklet_id = NULL, which.draw = NULL)
 }
 \arguments{
 \item{parms}{object produced by \code{\link{fit_enorm}} or a data.frame with columns item_id, item_score and, 
-depending on parametrization, a column named beta/delta, eta or b}
+depending on parametrization, a column named either beta/delta, eta or b}
 
 \item{items}{vector of one or more item_id's. If NULL and booklet_id is also NULL, all items in parms are used}
 
@@ -32,10 +35,13 @@ Each function returns a new function which accepts a vector of theta's. These re
 \item{expected_score}{an equal length vector with the expected score at each value of theta}
 \item{r_score}{a matrix with length(theta) rows and one column for each item containing simulated scores based on theta. 
 To obtain test scores, use rowSums on this matrix}
+\item{p_score}{a matrix with length(theta) rows and one column for each possible score containing the probability of 
+the score given theta}
 }
 }
 \description{
-returns information function, expected score function or score simulation function for a single item, an arbitrary group of items or all items
+returns information function, expected score function, score distribution, or score simulation function 
+for a single item, an arbitrary group of items or all items
 }
 \examples{
 

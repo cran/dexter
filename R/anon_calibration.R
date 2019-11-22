@@ -1,6 +1,6 @@
 
 
-elsym <- function(b,a,first,last,i1=0,i2=0)
+elsym <- function(b,a,first,last,i1=0L,i2=0L)
 {
   n = length(first)
   ms = as.integer(sum(a[last]))
@@ -13,7 +13,41 @@ elsym <- function(b,a,first,last,i1=0,i2=0)
 }
 
 
+# returns log likelihood, or vector of log likelihoods if bayes
+logL = function(parms, mean_gibbs=FALSE)
+{
+  a = parms$inputs$ssIS$item_score
+  b = parms$est$b
+  if(is.matrix(b) && mean_gibbs)
+    b=colMeans(b)
   
+  scoretab= split(parms$inputs$scoretab,parms$inputs$scoretab$booklet_id,drop=FALSE)
+  design = split(parms$inputs$design, parms$inputs$design$booklet_id, drop=TRUE)
+  
+  llb = function(b)
+  {
+    ll_rm = sum(parms$inputs$ssIS$sufI * log(b))
+    
+    lgRM = sapply(scoretab,
+           function(stb)
+           {
+             d = design[[stb$booklet_id[1]]]
+             log(elsym(b, a, d$first, d$last)) * stb$N
+           }) %>%
+      unlist() %>%
+      sum()
+  
+    ll_rm-lgRM
+  }
+  if(is.matrix(b))
+  {
+    apply(b,1, llb)
+  } else
+  {
+    llb(b)
+  }
+}
+
 
 ######################################################################
 # Estimation of Rasch and Interaction Model 
@@ -219,9 +253,8 @@ NR_bkl = function(..., use_mean = FALSE)
 }
 
 
-
-calibrate_CML <- function(scoretab, design, sufI, a, first, last, nIter, fixed_b=NULL) {
-  
+calibrate_CML <- function(scoretab, design, sufI, a, first, last, nIter, fixed_b=NULL,progress = show_progress()) 
+{
   
   use_mean = FALSE
   # perhaps this first part should be moved to fit_enorm
@@ -257,9 +290,7 @@ calibrate_CML <- function(scoretab, design, sufI, a, first, last, nIter, fixed_b
     as.integer()
   
   # end bookkeeping
-  
-  pb = pg_bar(min=0, max=nIter)
-  
+
   if (is.null(fixed_b)) # if no fixed parameters
   {
     nn= sum(sufI)
@@ -284,8 +315,9 @@ calibrate_CML <- function(scoretab, design, sufI, a, first, last, nIter, fixed_b
         next
       } 
       b = b*sufI/EsufI
-      pb$tick()
+      if(progress) pg_tick()
     }
+    
     ie_iter=iter
     if (!converged) warning(paste('Implicit Equations not Converged in',as.character(nIter),"iterations"))
     
@@ -299,8 +331,7 @@ calibrate_CML <- function(scoretab, design, sufI, a, first, last, nIter, fixed_b
     # between items
     ref_cat=2
     b[-first] = b[-first]/(b[ref_cat]^(a[-first]/a[ref_cat]))
-    
-    
+
     ###  NR  ###
     H = matrix(0,length(a),length(a))
     converged=FALSE
@@ -337,7 +368,7 @@ calibrate_CML <- function(scoretab, design, sufI, a, first, last, nIter, fixed_b
         next 
       }
       b = nb
-      pb$tick()
+      if(progress) pg_tick()
       if (nr_iter==2) scale=1
     }
     if (!converged) warning(paste('Newton-Raphson not Converged in',as.character(nr_iter),"iterations"))
@@ -373,8 +404,9 @@ calibrate_CML <- function(scoretab, design, sufI, a, first, last, nIter, fixed_b
       } 
       
       b[update_set] = b[update_set]*sufI[update_set]/EsufI[update_set]
-      pb$tick()
+      if(progress) pg_tick()
     }
+    
     ie_iter=iter
     if (!converged) warning(paste('Implicit Equations not Converged in',nIter,"iterations"))
     
@@ -421,29 +453,29 @@ calibrate_CML <- function(scoretab, design, sufI, a, first, last, nIter, fixed_b
       }
       b = nb
       
-      pb$tick()
+      if(progress) pg_tick()
       scale=1
     }
 
     if (!converged) warning(paste('Newton-Raphson not Converged in',nr_iter,"iterations"))
   }
-  pb$close()
 
+  report = toOPLM(a, b, first, last, H=H, fixed_b=fixed_b)
+  b = report$b_renorm
+  
   lx = mapply(
       function(bdes, bsct)
       {
         tibble(booklet_id = bdes$booklet_id[1],
-               score = bsct$booklet_score,
-               lambda = ifelse(bsct$N>0, bsct$N/(elsym(b,a,bdes$first,bdes$last)*sum(bsct$N)), NA_real_))
+               booklet_score = bsct$booklet_score,
+               lambda = ifelse(bsct$N>0, bsct$N/(elsym(b,a,bdes$first,bdes$last)), NA_real_)) #*sum(bsct$N)
       },
       split(design, design$booklet_id),
       split(scoretab, scoretab$booklet_id), 
       SIMPLIFY=FALSE, USE.NAMES=FALSE) %>%
     bind_rows()
   
-  
-  report = toOPLM(a, b, first, last, H=H, fixed_b=fixed_b)
-  return(list(b=report$b_renorm, H=H, beta=report$beta, acov.beta=report$cov.beta, 
+  return(list(b=b, H=H, beta=report$beta, acov.beta=report$cov.beta, 
               lambda=lx, n_iter=iter, nr_iter = nr_iter, ie_iter=ie_iter))
 }
 
@@ -452,11 +484,20 @@ calibrate_CML <- function(scoretab, design, sufI, a, first, last, nIter, fixed_b
 # scoretab: data.frame: booklet_id, booklet_score, N; ordered by booklet_id, booklet_score; N=0 included
 # design: data.frame: booklet_id, item_id, first, last; ordered by booklet_id, first
 # fixed_b: NULL or vector of length(b) with NA's for free parameters
-calibrate_Bayes = function(scoretab, design, sufI, a,b, first, last,  nIter, fixed_b=NULL)
+# TO DO: At this moment b and lambda are not consistent. b and delta are. We must recalculate the 
+# lambda' s using the renormalized b to solve this.
+calibrate_Bayes = function(scoretab, design, sufI, a, first, last,  nIter, fixed_b=NULL, progress = show_progress())
 {
-  from = Gibbs.settings$from.cal; step = Gibbs.settings$step.cal
-  keep.which = seq(from,(from-step)*(from>step)+step*nIter,by=step)
-  nIter = max(keep.which)
+  if(Gibbs.settings$start_b=='random')
+  {
+    b = exp(runif(length(a), -1, 1))
+    b[first] = 1
+  } else
+  {
+    b = calibrate_CML(scoretab, design, sufI, a, first, last, nIter, fixed_b)$b 
+  }
+  prior_eta = 0.5
+  prior_rho = 0.5
   
   design = design %>%
     mutate(bn = dense_rank(.data$booklet_id) - 1L) %>%
@@ -468,7 +509,7 @@ calibrate_Bayes = function(scoretab, design, sufI, a,b, first, last,  nIter, fix
   bi = design$inr
   ib = design$bn
   
-  nbi = design %>% count(.data$first) %>% pull(.data$n)
+  nbi = design %>% count(.data$first) %>% arrange(.data$first) %>% pull(.data$n)
   nib = design %>% count(.data$bn) %>% arrange(.data$bn) %>% pull(.data$n)
   
   design = arrange(design,.data$bn)
@@ -476,11 +517,12 @@ calibrate_Bayes = function(scoretab, design, sufI, a,b, first, last,  nIter, fix
   bfirst = as.integer(design$first -1L)
   blast = as.integer(design$last -1L)
   
-  bnscore = scoretab %>%
-    count(.data$booklet_id) %>%
-    arrange(.data$booklet_id) %>%
-    pull(.data$n)
-  
+  bmax = design %>%
+    group_by(.data$bn) %>%
+    summarise(max_score = sum(a[.data$last])) %>%
+    ungroup() %>%
+    pull(.data$max_score)
+
   m = scoretab %>%
     group_by(.data$booklet_id) %>%
     summarize(m=sum(.data$N)) %>%
@@ -493,12 +535,20 @@ calibrate_Bayes = function(scoretab, design, sufI, a,b, first, last,  nIter, fix
   if(is.null(fixed_b))
     fixed_b_vec = rep(NA_real_, length(b))
   
+  pgw = as.integer(if(progress) getOption("width") - nchar('| 100%') - 2 else 0)
+
   
-  bx = calibrate_Bayes_C(as.integer(a), as.integer(first-1L), as.integer(last-1L),
-                         ib,bi,  nbi, nib, bfirst, blast, bnscore, m,
-                         sufI, scoretab$N, b, fixed_b_vec, as.integer(nIter))
-  bx = bx[keep.which,]
-  report = toOPLM(a,bx, first, last, H=NULL,fixed_b=fixed_b)
-  return(list(a=a, b=report$b_renorm,lambda=NULL, beta=report$beta))
+  out = calibrate_Bayes_C(as.integer(a), as.integer(first-1L), as.integer(last-1L),
+                         ib, bi, nbi, nib, bfirst, blast, bmax, m,
+                         sufI, scoretab$N, b, fixed_b_vec, 
+                         Gibbs.settings$from.cal, Gibbs.settings$step.cal, 
+                         as.integer(nIter), prior_eta, prior_rho,
+                         pgw)
+
+  report = toOPLM(a, out$b, first, last, H=NULL,fixed_b=fixed_b)
+  
+  colnames(out$lambda) = paste(scoretab$booklet_id, scoretab$booklet_score, sep='-')
+  
+  return(list(a=a, b=report$b_renorm, lambda=out$lambda, beta=report$beta)) #use b=out$b for consistency with lambda
 }
 

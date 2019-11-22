@@ -36,7 +36,6 @@ dvcolors = function(n, user_colors=NULL)
 
 
 
-
 lighten = function(color, factor = 0.5) {
   if ((factor > 1) || (factor < 0)) stop("factor needs to be within [0,1]")
   col = col2rgb(color)
@@ -87,15 +86,20 @@ draw_curtains = function(qnt)
 #' 
 distractor_plot = function(dataSrc, item_id, predicate=NULL, legend=TRUE, curtains=10, col=NULL,...){  
   check_dataSrc(dataSrc)
-  
-  
+
   qtpredicate = eval(substitute(quote(predicate)))
   env = caller_env()
   item_id = as.character(item_id)
   check_string(item_id)
   item = item_id
   
-  if(is.null(qtpredicate) && inherits(dataSrc,'DBIConnection'))
+  iprop = list()
+  if(is_db(dataSrc))
+    iprop = as.list(dbGetQuery_param(dataSrc,'SELECT * FROM dxItems WHERE item_id= :item;', 
+                                     tibble(item=item)))
+  
+  
+  if(is.null(qtpredicate) && is_db(dataSrc))
   {
     # pre process a little to make things faster
   	booklets = dbGetQuery_param(dataSrc,
@@ -118,7 +122,7 @@ distractor_plot = function(dataSrc, item_id, predicate=NULL, legend=TRUE, curtai
   if('item_position' %in% colnames(respData$design))
   {
     ipos = respData$design
-  } else if(is_bkl_safe(dataSrc, qtpredicate) && inherits(dataSrc,'DBIConnection'))
+  } else if(is_bkl_safe(dataSrc, qtpredicate, env) && is_db(dataSrc))
   {
     ipos = dbGetQuery(dataSrc, paste("SELECT booklet_id, item_position FROM dxbooklet_design WHERE item_id=", 
                                      sql_quote(item,"'")))
@@ -171,13 +175,14 @@ distractor_plot = function(dataSrc, item_id, predicate=NULL, legend=TRUE, curtai
     {
       N = sum(bkl_scores$n)
       
-      labs = list(pvalue = weighted.mean(y$item_score, y$n)/max_score,
+      labs = modifyList(iprop,
+        list(pvalue = weighted.mean(y$item_score, y$n)/max_score,
                   rit = weighted_cor(y$item_score, y$booklet_score, y$n),
                   rir = weighted_cor(y$item_score, y$booklet_score - y$item_score, y$n),
                   n = N,
                   item_position = filter(respData$design, .data$booklet_id==booklet)$item_position,
                   booklet_id=booklet,
-                  item_id=item)
+                  item_id=item))
       
       plot.args = merge_arglists(user.args, 
                                  default=default.args,
@@ -270,7 +275,7 @@ profile_plot = function(dataSrc, item_property, covariate, predicate = NULL, mod
   check_string(covariate)
   model = match.arg(model)
   user.args = list(...)
-  if(inherits(dataSrc,'DBIconnection'))
+  if(is_db(dataSrc))
   {
     item_property = dbValid_colnames(item_property)
     covariate = dbValid_colnames(covariate)
@@ -285,10 +290,10 @@ profile_plot = function(dataSrc, item_property, covariate, predicate = NULL, mod
   respData = get_resp_data(dataSrc, qtpredicate, extra_columns = covariate, env = env)  %>%
 	  intersection()
   
-  respData$x$covariate = ffactor(respData$x$covariate)
+  respData$x[[covariate]] = ffactor(respData$x[[covariate]])
   
     
-  if(inherits(dataSrc,'DBIConnection') && item_property %in% dbListFields(dataSrc,'dxitems'))
+  if(is_db(dataSrc) && item_property %in% dbListFields(dataSrc,'dxitems'))
   {
     domains = dbGetQuery(dataSrc, paste("SELECT item_id,", item_property, "FROM dxitems;")) %>%
       semi_join(tibble(item_id = levels(respData$x$item_id)), by='item_id')

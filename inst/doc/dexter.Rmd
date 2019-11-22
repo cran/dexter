@@ -1,9 +1,11 @@
 ---
 title: "Dexter: The Fundamentals"
-author: "Ivailo Partchev"
+author: "Ivailo Partchev, Jesse Koops, Timo Bechger, Gunter Maris"
 date: "`r Sys.Date()`"
 bibliography: dexter.bib
-output: rmarkdown::html_vignette
+output: 
+  rmarkdown::html_vignette:
+    df_print: kable
 vignette: >
   %\VignetteIndexEntry{Dexter: The Fundamentals}
   %\VignetteEngine{knitr::rmarkdown}
@@ -26,7 +28,6 @@ par_hook = function(before, options, envir)
   }
 }
 knit_hooks$set(par = par_hook)
-options(dexter.progress=FALSE)
 
 ```
 
@@ -84,7 +85,7 @@ Of course, the `item_id` must be exactly as specified in the scoring rules. Func
 
 ```{r}
 get_booklets(db)
-get_items(db)
+head(get_items(db))
 get_persons(db) %>% 
   glimpse()
 ```

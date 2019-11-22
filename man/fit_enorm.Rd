@@ -5,7 +5,7 @@
 \title{Fit the extended nominal response model}
 \usage{
 fit_enorm(dataSrc, predicate = NULL, fixed_params = NULL,
-  method = c("CML", "Bayes"), nIterations = 500,
+  method = c("CML", "Bayes"), nIterations = 1000,
   merge_within_persons = FALSE)
 }
 \arguments{

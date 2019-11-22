@@ -50,7 +50,7 @@ profiles = function(dataSrc, parms, item_property, predicate=NULL, merge_within_
   check_string(item_property)
 
 
-  if(inherits(dataSrc, 'DBIconnection'))
+  if(is_db(dataSrc))
     item_property = dbValid_colnames(item_property)
   
   respData = get_resp_data(dataSrc, qtpredicate, summarised=FALSE, env=env, 
@@ -61,7 +61,7 @@ profiles = function(dataSrc, parms, item_property, predicate=NULL, merge_within_
   if(!is.integer(respData$x[[item_property]]))
     respData$x[[item_property]] = ffactor(respData$x[[item_property]])
 
-  if(inherits(dataSrc,'DBIConnection') && item_property %in% dbListFields(dataSrc,'dxitems'))
+  if(is_db(dataSrc) && item_property %in% dbListFields(dataSrc,'dxitems'))
   {
     domains = dbGetQuery(dataSrc, paste("SELECT item_id,", item_property, "FROM dxitems;"))
     domains$item_id = ffactor(domains$item_id, levels = levels(respData$x$item_id))
@@ -79,7 +79,7 @@ profiles = function(dataSrc, parms, item_property, predicate=NULL, merge_within_
   design = respData$design
   
   respData = respData %>%
-    polytomize(item_property, protect_x=!inherits(dataSrc,'DBIConnection')) 
+    polytomize(item_property, protect_x=!is_db(dataSrc)) 
   
   out = respData$x %>%
     inner_join(

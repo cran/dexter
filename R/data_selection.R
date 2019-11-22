@@ -41,6 +41,7 @@ get_responses = function(dataSrc, predicate=NULL, columns=c('person_id','item_id
 {
   env = caller_env() 
   qtpredicate = eval(substitute(quote(predicate)))
+  check_dataSrc(dataSrc)
   df_format(get_responses_(dataSrc, qtpredicate=qtpredicate, env=env, columns=columns))
 }
 
@@ -64,8 +65,8 @@ get_responses_ = function(dataSrc, qtpredicate=NULL, env=NULL, columns=c('person
     if(!is.null(qtpredicate))
       stop('predicates not supported for matrix datasource')
     
-    tibble(person_id=rep(persons, each=ncol(dataSrc)), 
-                  item_id=rep(items, ncol(dataSrc)),
+    tibble(person_id=rep(persons, ncol(dataSrc)), 
+                  item_id=rep(items, each=nrow(dataSrc)),
                   item_score=as.integer(dataSrc)) %>%
       filter(!is.na(.data$item_score))
     
@@ -108,36 +109,37 @@ db_get_responses = function(db, qtpredicate=NULL, columns=c('person_id','item_id
     env=caller_env() 
   
   columns = dbValid_colnames(columns)
-  if(is.null(qtpredicate))
-  {
-    where = ''
-    used_columns = columns
-  } else
-  {
-    where = try(qtpredicate2where(qtpredicate, db, env), silent=TRUE)
-    used_columns = union(columns, tolower(all.vars(qtpredicate)))                      
-  }
+	pred_sql = qtpredicate_to_sql(qtpredicate, db, env)
+  used_columns = union(pred_sql$db_vars, columns)
+  
   # decide which tables we need to join since joining costs time
   cte = get_cte(db, used_columns)
   
-  if(!inherits(where, 'try-error'))
-  { 
+  if(pred_sql$success)
+  {   
     respData = try(dbGetQuery(db, 
                      paste("SELECT", paste0(columns, collapse=','),
-                           "FROM", cte, where)),
+                           "FROM", cte, pred_sql$where)),
                    silent=TRUE)
     if(!inherits(respData,'try-error'))
       return(respData)
+    
+    if(grepl('malformed', respData))
+      stop('your database file appears to be broken, this can happen due to a copy error. For more information,', 
+           'see: https://www.sqlite.org/faq.html#q21')
   }
-
+  #message('sql translation of the predicate failed')
+  #print(pred_sql)
+  #print(qtpredicate)
+  
   # translation to sql did not work  
-  which_columns = intersect(c(columns, all.vars(qtpredicate)),
-                            get_variables(db)$name)
-          
-  respData = dbGetQuery(db, 
-               paste("SELECT", paste(which_columns, collapse=','),
-                      "FROM", cte))
 
+  respData = dbGetQuery(db, 
+               paste("SELECT", paste(used_columns, collapse=','),
+                      "FROM", cte))
+  
+  qtpredicate = correct_symbol_case(qtpredicate, used_columns,env=env)
+  
   return(respData[eval_tidy(qtpredicate, data=respData, env=env), columns])
 }
 
@@ -153,38 +155,30 @@ db_get_testscores = function(db, qtpredicate=NULL, columns=c('booklet_id','perso
     env=caller_env() 
   
   columns = dbValid_colnames(columns)
-  if(is.null(qtpredicate))
-  {
-    where = ''
-    used_columns = columns
-  } else
-  {
-    where = try(qtpredicate2where(qtpredicate, db, env), silent=TRUE)
-    # to~do: non.nse??? 
-    used_columns = union(columns, tolower(all.vars(qtpredicate)))                       
-  }
+  pred_sql = qtpredicate_to_sql(qtpredicate, db, env)
+  used_columns = union(pred_sql$db_vars, columns)
+  
   # decide which tables we need to join since joining costs time
   cte = get_cte(db, used_columns)
   
-  if(!inherits(where, 'try-error'))
+  if(pred_sql$success)
   { 
     respData = try(dbGetQuery(db, 
                      paste("SELECT", paste0(columns, collapse=','), ", SUM(item_score) AS booklet_score",
-                             "FROM", cte, where,
+                             "FROM", cte, pred_sql$where,
                              "GROUP BY", paste0(columns, collapse=','),";")),        
                    silent=TRUE) 
     if(!inherits(respData,'try-error'))
       return(respData)
   }
   
-  which_columns = intersect(c(columns, all.vars(qtpredicate),'item_score'),
-                             get_variables(db)$name)
-        
   respData = dbGetQuery(db, 
-               paste("SELECT", paste(which_columns, collapse=','),
+               paste("SELECT", paste(used_columns, collapse=','),
                         "FROM", cte))
   
-  # this is a worse case scenario, it will take very long compared to using C, as a to~do?
+  qtpredicate = correct_symbol_case(qtpredicate, used_columns,env=env)
+  
+  # this is a worse case scenario, it will take very long compared to using C, as a to do?
   return(
     respData[eval_tidy(qtpredicate, data=respData, env=env), columns] %>%
       group_by_at(columns) %>%
@@ -215,16 +209,15 @@ db_get_design = function(db, qtpredicate=NULL, env=NULL)
            FROM dxbooklet_design
              INNER JOIN bkl_count USING(booklet_id);"))
   
-  if(is_bkl_safe(db, qtpredicate) )
+  if(is_bkl_safe(db, qtpredicate, env) )
   {
     uns = setdiff(c(dbListFields(db,'dxadministrations'), dbListFields(db,'dxpersons')),
                   'booklet_id')
-    
-    where = try(qtpredicate2where(qtpredicate, db, env))
-    
-    if(!inherits(where,'try-error'))
+    pred_sql = qtpredicate_to_sql(qtpredicate, db, env)
+
+    if(pred_sql$success)
     {
-      if(length(intersect(all.vars(qtpredicate), uns)) == 0) 
+      if(length(intersect(pred_sql$db_vars, uns)) == 0) 
       {
         res = try(
           dbGetQuery(db, paste(
@@ -238,7 +231,7 @@ db_get_design = function(db, qtpredicate=NULL, env=NULL)
                  INNER JOIN bkl_count USING(booklet_id)
                    INNER JOIN dxbooklet_design USING(booklet_id)
                      INNER JOIN dxitems USING(item_id)",
-              where,";")))
+              pred_sql$where,";")))
       } else
       {
         res = try(
@@ -249,7 +242,7 @@ db_get_design = function(db, qtpredicate=NULL, env=NULL)
                    INNER JOIN dxitems USING(item_id)
                     INNER JOIN dxadministrations USING(booklet_id)
                       INNER JOIN dxpersons USING(person_id)",
-                where,
+                pred_sql$where,
             "GROUP BY booklet_id, item_id, item_position;")))
       }
       if(!inherits(res,'try-error'))

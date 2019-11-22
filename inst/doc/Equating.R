@@ -1,6 +1,6 @@
 ## ----setup, include=FALSE------------------------------------------------
 knitr::opts_chunk$set(echo = TRUE, dev='CairoPNG') 
-options(dexter.progress=FALSE)
+
 library(dplyr)
 library(ggplot2)
 
@@ -87,7 +87,7 @@ plot(1-specificity, sensitivity, col="green", xlim=c(0,1), ylim=c(0,1), type="l"
 text(1-specificity, sensitivity, as.character(0:28), cex=0.7, offset = 0)
 abline(0,1,lty=2, col="grey")
 
-## ---- echo=FALSE---------------------------------------------------------
+## ---- include=FALSE------------------------------------------------------
 close_project(db)
 
 

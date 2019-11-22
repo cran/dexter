@@ -231,7 +231,7 @@ update_pv_prior_mixnorm = function (pv, p, mu, sigma) {
 #
 # @return
 # tibble(booklet_id <char or int>, person_id <char>, booklet_score <int>, nPV nameless columns with plausible values)
-pv = function(x, design, b, a, nPV, from = NULL, by = NULL, prior.dist = c("normal", "mixture"))
+pv = function(x, design, b, a, nPV, from = NULL, by = NULL, prior.dist = c("normal", "mixture"), progress = show_progress())
 {
   prior.dist = match.arg(prior.dist)
   nPop = length(unique(x$pop))
@@ -257,7 +257,6 @@ pv = function(x, design, b, a, nPV, from = NULL, by = NULL, prior.dist = c("norm
       stop(paste("at least", as.character(nIter), "samples of item parameters needed in function pv"))
     }
 
-    pb = pg_bar(min=0, max=nIter)
     for(iter in 1:nIter)
     {
       if (prior.dist == "mixture")
@@ -292,15 +291,14 @@ pv = function(x, design, b, a, nPV, from = NULL, by = NULL, prior.dist = c("norm
       {
         colnames(x)[colnames(x)=='PVX'] = paste0('PV', iter)
       }
-      pb$tick()
+      if(progress) pg_tick(iter,nIter)
     }
-    pb$close()
     select(x, .data$booklet_id, .data$person_id,.data$booklet_score, matches('PV\\d+'))
     
   }else # if b is not a matrix
   {
     # it is safe to use the ordered pv's for the prior update
-	pb = pg_bar(min=0, max=n_prior_updates)
+
     for(iter in 1:n_prior_updates) 
     {
       if (prior.dist == "mixture")
@@ -328,9 +326,9 @@ pv = function(x, design, b, a, nPV, from = NULL, by = NULL, prior.dist = c("norm
         if (nPop==1) priors = update_pv_prior(pv$pv,pv$pop, priors$mu, priors$sigma)
         if (nPop>1)  priors = update_pv_prior_H(pv$pv,pv$pop,priors$mu, priors$sigma, priors$mu.a, priors$sigma.a)
       }
-	  pb$tick()
+      if(progress) pg_tick(iter,n_prior_updates)
     }
-    pb$close()
+
     x %>% 
         group_by(.data$booklet_id, .data$pop) %>%
         do({

@@ -210,6 +210,103 @@ arma::vec theta_mle_sec(const arma::vec& b, const arma::ivec& a,
 }
 
 
+// [[Rcpp::export]]
+double escore_wle(const double theta, const arma::vec& b, const arma::ivec& a, const arma::ivec& first,  const arma::ivec& last, const int nI, const int max_a)
+{
+	
+
+	const int max_ncat = max(last - first) + 1;
+	
+	std::vector<long double> Fij(max_ncat);
+	
+	long double I=0,J=0;
+
+
+	for(int i=0;i<nI;i++)
+	{
+		long double colsm = 0;	
+		for(int j = first[i],k=0; j<=last[i]; j++, k++)
+		{
+			Fij[k] = b[j] * exp(a[j] * theta);
+			colsm += Fij[k];
+		}
+
+		long double M1=0, M2=0, M3=0;
+		for(int j=first[i], k=0; j<=last[i];j++, k++)
+		{
+			long double M = Fij[k]/colsm;	
+			M1 += a[j] * M;
+			M2 += (a[j] * a[j]) * M;
+			M3 += (a[j] * a[j] * a[j]) * M;			
+		}
+			
+		I += M2 - M1*M1;
+		J += M3 - M1*(3.0*M2 - 2.0*M1*M1);
+	}
+	
+	return Escore_single(theta, b, a, first, last, nI, max_a) - (J/(2*I));
+}
+
+
+
+// Secant method used to find W-MLE of theta
+// gives an error for non-monotonicity 
+// [[Rcpp::export]]
+arma::vec theta_wle_sec(const arma::vec& b, const arma::ivec& a, 
+						const arma::ivec& first, const arma::ivec& last)
+{
+	const int n = first.n_elem;
+	const int maxA = max(a(conv_to<uvec>::from(last))); 
+	const int max_score = accu(a(conv_to<uvec>::from(last)));
+	
+	vec theta(max_score+1);
+	
+	double xl = 0, rts = -2;
+	double fl = escore_wle(xl, b, a, first, last, n, maxA),
+		   f = escore_wle(rts, b, a, first, last, n, maxA);
+	
+	double dx;
+	
+	const int max_iter = 200;
+	const double acc = 1e-8; // this might be a little too small but it seems to work
+
+	// secant	
+	for(int s=0; s<=max_score; s++)
+	{
+		for(int iter=0; iter<max_iter; iter++)
+		{
+			// protection against non-monotonicity
+			if((xl > rts) != (fl > f))
+			{
+				//printf("score: %i\nxl: %f > rts: %f\nfl: %f > f %f\n", s, xl, rts, fl, f);
+				//fflush(stdout);
+				Rcpp::stop("Warm WLE estimates do not converge");
+			}
+			
+			dx = (xl-rts) * (f-s)/(f-fl);
+			xl = rts;
+			fl = f;
+			rts += dx;
+			f = escore_wle(rts, b, a, first, last, n, maxA);						
+			if(std::abs(dx) < acc)
+				break;
+			
+		} 
+		theta[s] = rts;
+		rts += 0.1; // give rts a nudge, otherwise (f-s)/(f-fl) can overflow since f-fl is often very small
+		f = escore_wle(rts, b, a, first, last, n, maxA);
+	}
+	return theta;
+}
+
+
+
+
+	
+
+
+
+
 
 /*
 * output: I, J, logFi assumed to be initialized to zero by caller
@@ -265,6 +362,9 @@ void IJ_c(const arma::vec& theta, const arma::vec& b, const arma::ivec& a,
 
 	} 
 }
+
+
+
 
 
 
@@ -359,31 +459,7 @@ arma::vec PVrecycle(const arma::vec& b, const arma::ivec& a, const arma::ivec& f
 }
 
 
-/*
-library(dplyr)
-db = start_new_project(verbAggrRules, ":memory:")
-add_booklet(db, verbAggrData, "agg")
 
-m = fit_inter(db, booklet_id=='agg')
-
-#scores = sample(1:(2*24),100,replace=T)
-
-prob = get_testscores(db) %>%
-	count(booklet_score)
-	
-scores = sample(prob$booklet_score, 100000, replace=TRUE, prob=prob$n)
-
-s=dexter:::simIM(m,scores)
-
-f=fit_inter(s)
-
-plot(coef(m)$beta_IM, coef(f)$beta_IM)
-abline(0,1)
-
-plot(coef(m)$sigma, coef(f)$sigma)
-abline(0,1)
-*/
-// van delta en sigma naar b
 // [[Rcpp::export]]
 arma::imat sampleIM(const arma::vec& bIM, const arma::vec& cIM, const arma::ivec& a, const arma::ivec& first, const arma::ivec& last,
 					const arma::ivec& scoretab)
@@ -396,11 +472,11 @@ arma::imat sampleIM(const arma::vec& bIM, const arma::vec& cIM, const arma::ivec
 	const int maxsec = 200;
 	const double acc = 1e-8;
 	double theta = -2;
-
+	
 	vec logb = log(bIM), logc = log(cIM);
 	
 	vec b(&bIM[0], bIM.n_elem);
-	ivec to_gain(nI);
+
 	ivec cs_scoretab(max_score+1);
 	vec lookup(maxA+1);
 	vec p(maxA+3);
@@ -412,17 +488,13 @@ arma::imat sampleIM(const arma::vec& bIM, const arma::vec& cIM, const arma::ivec
 	cs_scoretab[0] = 0;
 	for(int i=0; i<max_score; i++)
 		cs_scoretab[i+1] = scoretab[i] + cs_scoretab[i];
-	
-	to_gain[nI-1] = 0;
-	for(int i = nI-2; i>=0; i--)
-		to_gain[i] = to_gain[i+1] + a[last[i]];
+
 	
 	for(int s=1; s<max_score; s++)
 	{
-		// adjust b, maak ik hier een fout?
 		for(int i=0; i<nI; i++)
 			for (int j=first[i]+1; j<=last[i]; j++) 
-				b[j] = exp(logb[j] + s * logc[i]);
+				b[j] = exp(logb[j] + s * a[j] * logc[i]);
 		
 		// derive theta
 		double xl = theta + 0.5;
@@ -462,7 +534,7 @@ arma::imat sampleIM(const arma::vec& bIM, const arma::vec& cIM, const arma::ivec
 				while(u>p[k]) k++;
 				score += a[first[i]+k];
 				out.at(pi, i) = a[first[i]+k];
-				if(score > s || score + to_gain[i]<s)
+				if(score > s )
 					break;
 			}
 			if(score == s)
@@ -472,4 +544,6 @@ arma::imat sampleIM(const arma::vec& bIM, const arma::vec& cIM, const arma::ivec
 
 	return out;
 }
+
+
 

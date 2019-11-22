@@ -1,4 +1,9 @@
 
+is_db = function(db)
+{
+  inherits(db,'DBIConnection')
+}
+
 
 dbRunScript = function(db, fn)
 {
@@ -45,7 +50,7 @@ dbUniquePersonIds = function(db,n)
                             WHERE person_id ~ '^dx_\\d+$'
                               ORDER BY person_id DESC LIMIT 1;")
   }
- 
+ # to~do: other db's
   if (NROW(last)==0) { last = 0L}  else {last = as.integer(last[1,1])}
   
   return(sprintf('dx_%07i',(1:n) + last))

@@ -5,7 +5,7 @@
 #' Set performance standards on one or more test forms using the data driven direct consensus (3DC) method
 #'
 #' @param parms parameters object returned from fit_enorm
-#' @param design a data.frame with columns `cluster_id` and `item_id`
+#' @param design a data.frame with columns `cluster_id`, `item_id` and optionally `booklet_id`
 #' @param x an object containing parameters for the 3DC standard setting procedure
 #' @param object an object containing parameters for the 3DC standard setting procedure
 #' @param booklet_id which test form to plot
@@ -120,7 +120,8 @@ standards_3dc = function(parms, design)
 standards_db = function(par.sts, file_name, standards, population=NULL, group_leader = 'admin')
 {
   if (file.exists(file_name)) 
-    file.remove(file_name)
+    if(!file.remove(file_name))
+      stop('file already exists and cannot be removed')
   
   booklets = names(par.sts$est)
   if(!is.list(standards))
@@ -185,14 +186,14 @@ standards_db = function(par.sts, file_name, standards, population=NULL, group_le
 
     if(!is.null(population))
     {
-      check_df(population, 'booklet_id', 'booklet_score', 'n')
+      check_df(population, c('booklet_id', 'booklet_score', 'n'))
       #to~do: possible pop from prms?
       if(length(intersect(booklets,population$booklet_id)) < length(booklets))
         stop("one or more booklet_id's in your population do not exist in your sts parameters")
       dbExecute(db3dc, 
               "INSERT INTO Population(test_id,test_score,test_score_frequency) 
                 VALUES(:booklet_id, :booklet_score, :n);",
-                count(population, .data$booklet_id, .data$booklet_score, .data$n))
+                select(population, .data$booklet_id, .data$booklet_score, .data$n))
     } 
   }, on_error=function(e){
     dbDisconnect(db3dc); file.remove(file_name); stop(e)})

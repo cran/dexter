@@ -1,41 +1,65 @@
 
-
 # attempt to translate a quoted predicate and an environment to an SQL 'WHERE' statement
-#
-qtpredicate2where = function(qtpredicate, db, env)
+# also returns vars intersected with db and all_vars
+qtpredicate_to_sql = function(qtpredicate, db, env)
 {
-  if(is.sql(qtpredicate))
-  {
-    qtpredicate = trimws(qtpredicate)
-    
-    if(qtpredicate == '')
-      return(qtpredicate)
-    
-    if(startsWith(qtpredicate,'WHERE '))
-      return(qtpredicate)
-    
-    return(paste('WHERE', qtpredicate))
-  }
-  
-  vars = unique(c(dbListFields(db,'dxitems'), dbListFields(db,'dxbooklets'), dbListFields(db,'dxpersons'), 
-                  dbListFields(db,'dxbooklet_design'),dbListFields(db,'dxresponses'),
-                  dbListFields(db,'dxscoring_rules'), dbListFields(db,'dxadministrations')))
+  if(is.null(qtpredicate))
+    return(list(success=TRUE, where='', db_vars = character(), all_vars=character()))
+
+  dbvars = unique(c(dbListFields(db,'dxitems'), dbListFields(db,'dxbooklets'), 
+                    dbListFields(db,'dxpersons'), dbListFields(db,'dxbooklet_design'),
+                    dbListFields(db,'dxresponses'), dbListFields(db,'dxscoring_rules'), 
+                    dbListFields(db,'dxadministrations')))
   
   variant = switch(class(db), SQLiteConnection = 'sqlite', PostgreSQLConnection = 'postgresql', 
                    PqConnection = 'postgresql','ansi')
   
-  pred = partial_eval(qtpredicate, vars=vars, env=env)
+  out = list(success=TRUE)
   
-  if(is.logical(pred) && isTRUE(pred))
-    return('')
-  
-  if(is.null(pred))
-    stop('cannot be translated')
+  if(is.sql(qtpredicate))
+  {
+    out$all_vars = sql_vars(qtpredicate)
+    
+    qtpredicate = trimws(qtpredicate)
+    
+    if(qtpredicate == '')
+    {
+      out$where = ''
+    } else
+    {
+      if(!startsWith(qtpredicate,'WHERE '))
+        qtpredicate = paste('WHERE', qtpredicate)
+      out$where = qtpredicate
+    }
+  } else
+  {
+    pred = try(partial_eval(qtpredicate, vars=dbvars, env=env), silent=TRUE)
+    # error is extremely unlikely
+    if(is.null(pred) || inherits(pred,'try-error'))
+    {
+      out$success = FALSE
+      out$where = NULL
+      out$all_vars = all.vars(qtpredicate)
+    } else if(is.logical(pred) && isTRUE(pred))
+    {
+      out$where = ''
+      out$all_vars = character()
+    } else
+    {
+      out$all_vars = all.vars(pred)
+      out$where = try(paste(' WHERE', translate_sql(pred, variant = variant)), silent=TRUE)
+      if(inherits(out$where, 'try-error'))
+        out$success = FALSE
+    }
+  }
+  out$db_vars = intersect(dbvars, out$all_vars)
 
-  return(paste(' WHERE', translate_sql(pred, variant = variant)))
+  for( v in setdiff(out$all_vars, out$db_vars))
+    if(!env_has(env, v, inherit=TRUE))
+      stop("object '", v, "' not found")
+  
+  out
 }
-
-
 
 
 # evaluates quoted expression as used in get_responses
@@ -44,35 +68,23 @@ qtpredicate2where = function(qtpredicate, db, env)
 # We can be sure the booklets are not mutilated if
 # no item or respons level columns are used in the expression.
 # This can err on the safe side but never on the fast but unsafe side.
-is_bkl_safe = function(dataSrc, qtpredicate)
+is_bkl_safe = function(dataSrc, qtpredicate, env)
 {
-  if(inherits(dataSrc,'data.frame')) 
+  if(!is_db(dataSrc)) 
     return(FALSE)
   
   if(is.null(qtpredicate)) 
     return(TRUE)
  
-  db = dataSrc
+  pred_vars = qtpredicate_to_sql(qtpredicate, dataSrc, env)$db_vars
   
-  blacklist = unique(c( dbListFields(db,'dxitems'),
-                        dbListFields(db,'dxscoring_rules'),
-                        dbListFields(db,'dxbooklet_design'),
-                        dbListFields(db,'dxresponses'))) 
+  blacklist = unique(c( dbListFields(dataSrc,'dxitems'),
+                        dbListFields(dataSrc,'dxscoring_rules'),
+                        dbListFields(dataSrc,'dxbooklet_design'),
+                        dbListFields(dataSrc,'dxresponses'))) 
   
   blacklist = setdiff(blacklist, c('person_id','booklet_id'))
 
-  if(is.sql(qtpredicate))
-  {
-    pred_vars = attr(qtpredicate,'vars')
-    
-    if(is.null(pred_vars))
-      return(FALSE)
-  
-  } else
-  {
-    pred_vars = all.vars(qtpredicate)
-  }
-  
   return(length(intersect(pred_vars, blacklist)) == 0 )
 }
 
@@ -87,6 +99,26 @@ sql = function(txt, vars = character())
 
 is.sql = function(obj) ('sql' %in% class(obj)) 
 
+# if dbvars is null then only works if vars are sql-quoted
+sql_vars = function(sql,dbvars=NULL)
+{
+  if(!is.null(attr(sql,'vars')))
+  {
+    attr(sql,'vars')
+  } else if(!is.null(dbvars))
+  {
+    dbvars[sapply(dbvars, function(v){
+      grepl(paste0('(^|[^\\w\\d])',v,'($|[^\\w\\d])'),sql,perl=TRUE,ignore.case=TRUE)})]
+  } else
+  {
+    qt = '"'
+    if(grepl('`',sql,fixed=TRUE))
+      qt = '`'
+    
+    xpr = paste0('\\',qt,'[^\\',qt,']+','\\', qt)
+    gsub(qt, '', unlist(regmatches(sql, gregexpr(xpr, sql, perl=TRUE))))
+  }
+}
 
 
 eval_symbol = function(sbl, vars, env)
@@ -98,6 +130,12 @@ eval_symbol = function(sbl, vars, env)
   # functions should possibly/probably be excluded here
   if (env_has(env, name, inherit = TRUE)) 
     return(eval(sbl, env))
+  
+  if(tolower(name) %in% vars)
+  {
+    message("All variable names in a project are lowercase, changed '", name, "' -> '", tolower(name),"'")
+    return(as.symbol(tolower(name)))
+  }
   
   sbl
 }
@@ -137,7 +175,7 @@ eval_lang = function(call, vars, env)
     return(eval(call,env))
   }
 
-  if(length(intersect(c('%like%'), all.names(call))) == 0 && 
+  if(length(intersect(c('%like%','get'), all.names(call))) == 0 && 
      length(intersect(vars, non.nse.vars(call))) == 0)
   {
     out = try(eval(call, env), silent=TRUE)
@@ -149,6 +187,13 @@ eval_lang = function(call, vars, env)
   
   if(name=='local')
     return(eval(call[[2]], env))
+  
+  if(name == 'get')
+  {
+    a = partial_eval(call[[2]],vars=vars,env=env)
+    if(is.character(a) && length(a)==1 && a %in% vars)
+      return(as.name(a))
+  }
   
   # support dplyrs nasty/quasi quotation, I much prefer local but ok
   if(name=='!' && startsWith(paste(as.character(call),collapse=''),'!!'))
@@ -171,6 +216,7 @@ eval_lang = function(call, vars, env)
   
   call[-1] = lapply(call[-1], partial_eval, vars = vars, env = env)
   
+
   if(substring(name,1,3)=='as.')
   {
     if(all(all.names(call) %in% c('c',name)) && length(all.vars(call)) == 0)
@@ -277,6 +323,8 @@ trim_brackets = function(text)
   })
 }
 
+
+
 sql_infix = function(e, op, variant)
 {
   paste(translate_sql(e[[2]], variant), op, translate_sql(e[[3]],variant))
@@ -371,12 +419,22 @@ translate_sql_lang = function(call, variant)
   if(name %in% c('toupper','tolower'))
     name = toupper(gsub('to','',name, fixed=TRUE))
   
-  # simple %in% : already done by between
+  # simple %in% : already done 
   if(name == ':')
     stop('untranslatable') 
   
   if(name %in% c('nchar','str_length'))
     return(paste0("LENGTH(",translate_sql(call[[2]], variant),")"))
+  
+  if(name == '%in%')
+  {
+    type3 = typeof(call[[3]])
+    if(type3 == 'symbol' ||
+       (type3 %in% c('integer','double','character','logical','Date','POSIXct','POSIXlt') && length(call[[3]]) == 1))
+    {
+      return(paste(translate_sql(call[[2]], variant), 'IN(', translate_sql(call[[3]],variant),')'))
+    }
+  }
   
   if(startsWith(name,'%') && endsWith(name,'%'))
     return(sql_infix(call, gsub('%','',name,fixed=TRUE), variant))
@@ -542,6 +600,32 @@ translate_sql = function(e, variant) # variant = c('ansi','sqlite','postgresql')
   
   # e.g. complex not natively supported anywhere, will give errors
   stop(type)
+}
+
+
+
+
+
+correct_symbol_case = function (e, vars = character(), env) 
+{
+  type = typeof(e)
+  
+  if(type == 'symbol')
+  {
+    name = as.character(e)
+    if(name %in% vars || env_has(env, name, inherit = TRUE))
+      return(e)
+    
+    if(tolower(name) %in% vars)
+      return(as.symbol(tolower(name)))
+    
+    return(e)
+  }
+
+  if(length(e)>1)
+    e[] = lapply(e, correct_symbol_case, vars=vars, env=env)
+  
+  e
 }
 
 

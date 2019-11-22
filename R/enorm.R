@@ -1,68 +1,5 @@
 
 
-# item_id, item_score, and b, eta of beta
-transform.df.parms = function(parms.df, out.format = c('b','beta','eta'), include.zero = TRUE)
-{
-  # start with many checks
-  out.format = match.arg(out.format)
-  colnames(parms.df) = tolower(colnames(parms.df))
-  
-  if('delta' %in% colnames(parms.df))
-    parms.df = rename(parms.df, beta = 'delta')
-  in.format = intersect(colnames(parms.df), c('b','beta','eta'))
-  
-  if(length(in.format) == 0)
-    stop('parameters must contain at least one of following columns: b, beta, eta')
-  
-  if(length(in.format)>1)
-  {
-    in.format = in.format[1]
-    message(paste0("Using '",in.format,"' as input parameter"))
-  }
-  
-  if(!all(c('item_id','item_score') %in% colnames(parms.df)))
-    stop('parameters must contain the columns: item_id, item_score')
-  
-  if(any(parms.df$item_score%%1 > 0))
-    stop("column 'item_score' must be integer valued")
-  
-  if(n_distinct(parms.df$item_id, parms.df$item_score) < nrow(parms.df))
-    stop('multiple parameters supplied for the same item and score')
-  
-  parms.df = parms.df %>% 
-    mutate(item_id = as.character(.data$item_id), item_score = as.integer(.data$item_score)) %>%
-    arrange(.data$item_id, .data$item_score)
-  
-  
-  mm = parms.df %>% 
-    group_by(.data$item_id) %>% 
-    summarise(min_score = min(.data$item_score), max_score = max(.data$item_score)) %>%
-    ungroup()
-  
-  in.zero = any(mm$min_score == 0)
-  
-  if(in.zero && any(mm$min_score) != 0)
-    stop("Either all items or none of the items should include a zero score parameter")
-  
-  if(any(mm$max_score == 0))
-    stop('All items should contain at least one non-zero score parameter')
-  
-  if(any(mm$min_score<0))
-    stop("Negative scores are not allowed")
-
-  if(in.format == 'b' && any(parms.df$b < 0))
-      stop("A 'b' parameter cannot be negative, perhaps you meant to include a 'beta' parameter?")
-  
-  fl = parms.df %>%
-    mutate(rn = row_number()) %>%
-    group_by(.data$item_id) %>% 
-    summarize(first = as.integer(min(.data$rn)), last = as.integer(max(.data$rn))) %>%
-    ungroup()
-  
-  args = list(first = fl$first, last = fl$last, parms.df = parms.df, 
-              out.zero = include.zero, in.zero = in.zero)
-  do.call(get(paste0(in.format,'2',out.format)), args)
-}
 
 
 ##########################################
@@ -101,26 +38,38 @@ transform.df.parms = function(parms.df, out.format = c('b','beta','eta'), includ
 #' \code{\link{plot.prms}}
 #'
 fit_enorm = function(dataSrc, predicate = NULL, fixed_params = NULL, method=c("CML", "Bayes"), 
-                     nIterations=500, merge_within_persons=FALSE)
+                     nIterations=1000, merge_within_persons=FALSE)
 {
   method = match.arg(method)
   check_dataSrc(dataSrc)
   check_num(nIterations, 'integer', .length=1, .min=1)
   qtpredicate = eval(substitute(quote(predicate)))
   env = caller_env()
+ 
+  
+  
   fit_enorm_(dataSrc, qtpredicate = qtpredicate, fixed_params = fixed_params, 
              method=method, nIterations=nIterations, env=env, merge_within_persons=merge_within_persons)
 }
 
 
 fit_enorm_ = function(dataSrc, qtpredicate = NULL, fixed_params = NULL, method=c("CML", "Bayes"), 
-                      nIterations=500, env=NULL, merge_within_persons=FALSE) 
+                      nIterations=500, env=NULL, merge_within_persons=FALSE,progress = show_progress()) 
 {
   method = match.arg(method)
   if(is.null(env)) env = caller_env()
   
+  
+  
+  if(progress) pg_start()
+  if(progress && is_db(dataSrc))
+    cat(' retrieving data...')
+  
   respData = get_resp_data(dataSrc, qtpredicate, summarised=FALSE, env=env, retain_person_id=FALSE,
                            merge_within_persons = merge_within_persons)
+  
+  if(progress && is_db(dataSrc))
+    cat('\r                          \r|')
   
   design = respData$design
   
@@ -149,6 +98,14 @@ fit_enorm_ = function(dataSrc, qtpredicate = NULL, fixed_params = NULL, method=c
   	print(as.character(ssI$item_id[ssI$first == ssI$last]))
   	stop('One or more items are without score variation')
   }
+  if(any(ssIS$item_score[ssI$first] !=0))
+  {
+    # to do: check in interaction model
+    message('Items without a zero score category')
+    print(as.character(ssI$item_id[ssIS$item_score[ssI$first] !=0]))
+    stop('Minimum score for an item must be zero')
+  }
+  
   
   design = design %>%
     inner_join(ssI,by='item_id') %>%
@@ -234,7 +191,6 @@ fit_enorm_ = function(dataSrc, qtpredicate = NULL, fixed_params = NULL, method=c
   } else 
   {
     result = calibrate_Bayes(scoretab=scoretab, design=design, sufI=ssIS$sufI, a=ssIS$item_score,
-                              b=exp(runif(nrow(ssIS), -1, 1)), 
                               first=ssI$first, last=ssI$last, nIter=nIterations, fixed_b=fixed_b)
   }
   
@@ -284,10 +240,27 @@ fit_enorm_ = function(dataSrc, qtpredicate = NULL, fixed_params = NULL, method=c
 plot.prms = function(x, item_id=NULL, dataSrc=NULL, predicate=NULL, nbins=5, ci = .95, ...)
 {
   check_num(nbins,'integer',.length=1, .min=2)
+  dots = list(...)
   
-  # if no item id provided plot them all
+
   if(is.null(item_id))
-    item_id = x$inputs$ssI$item_id
+  {
+    if('items' %in% names(dots))
+    {
+      # common typo
+      item_id = dots$items
+      dots$items = NULL
+    } else
+    {
+      item_id = x$inputs$ssI$item_id
+    }
+  }
+  if(length(setdiff(item_id,x$inputs$ssI$item_id))>0)
+  {
+    message('The following items were not found in your parameters')
+    print(setdiff(setdiff(item_id,x$inputs$ssI$item_id)))
+    stop('unknown item',call.=FALSE)
+  }
 
   if(!is.null(dataSrc))
   {
@@ -297,10 +270,16 @@ plot.prms = function(x, item_id=NULL, dataSrc=NULL, predicate=NULL, nbins=5, ci 
     respData = get_resp_data(dataSrc, qtpredicate, env=env, retain_person_id=FALSE,
                              parms_check=filter(x$inputs$ssIS, .data$item_id %in% local(item_id)))
     
+    if(length(setdiff(as.character(item_id), levels(respData$design$item_id)))>0)
+    {
+      message('The following items were not found in dataSrc')
+      print(setdiff(as.character(item_id), levels(x$design$item_id)))
+      stop('unknown item',call.=FALSE)
+    }
+    
     x$abl_tables = list() # in dexmst it was briefly an environment
     
-    x$abl_tables$mle = respData$design %>% 
-      inner_join(x$inputs$ssI,by='item_id') %>%
+	  x$abl_tables$mle = suppressWarnings({inner_join(respData$design,x$inputs$ssI,by='item_id')}) %>%
       group_by(.data$booklet_id) %>%
       do({
         est = theta_MLE(x$est$b, a=x$inputs$ssIS$item_score, .$first, .$last, se=FALSE)
@@ -322,10 +301,10 @@ plot.prms = function(x, item_id=NULL, dataSrc=NULL, predicate=NULL, nbins=5, ci 
   if(length(item_id) > 1)
   {
     return(invisible(
-      lapply(item_id, function(itm) plot(x, itm, nbins=nbins, ci=ci, ...))))
+      lapply(item_id, function(itm) do.call(plot, append(list(x=x, item_id=itm, nbins=nbins, ci=ci), dots)))))
   }
   # for dplyr
-  item_id_ = item_id
+  item_id_ = as.character(item_id)
   
   expf = expected_score(x, items = item_id)
 
@@ -347,7 +326,7 @@ plot.prms = function(x, item_id=NULL, dataSrc=NULL, predicate=NULL, nbins=5, ci 
   rng = c(min(plt$gr_theta)-.5*rng/nbins,
           max(plt$gr_theta)+.5*rng/nbins)
   
-  plot.args = merge_arglists(list(...),
+  plot.args = merge_arglists(dots,
                              default=list(bty='l',xlab = expression(theta), ylab='score',main=item_id),
                              override=list(x = rng,y = c(0,max_score), type="n"))
   
@@ -454,10 +433,11 @@ coef.prms = function(object, hpd = 0.95, ...)
 
 #' Functions of theta
 #' 
-#' returns information function, expected score function or score simulation function for a single item, an arbitrary group of items or all items
+#' returns information function, expected score function, score distribution, or score simulation function 
+#' for a single item, an arbitrary group of items or all items
 #' 
 #' @param parms object produced by \code{\link{fit_enorm}} or a data.frame with columns item_id, item_score and, 
-#' depending on parametrization, a column named beta/delta, eta or b
+#' depending on parametrization, a column named either beta/delta, eta or b
 #' @param items vector of one or more item_id's. If NULL and booklet_id is also NULL, all items in parms are used
 #' @param booklet_id id of a single booklet (e.g. the test information function), if items is not NULL this is ignored
 #' @param which.draw the number of the random draw (only applicable if calibration method was Bayes). If NULL, the mean 
@@ -469,6 +449,8 @@ coef.prms = function(object, hpd = 0.95, ...)
 #' \item{expected_score}{an equal length vector with the expected score at each value of theta}
 #' \item{r_score}{a matrix with length(theta) rows and one column for each item containing simulated scores based on theta. 
 #' To obtain test scores, use rowSums on this matrix}
+#' \item{p_score}{a matrix with length(theta) rows and one column for each possible score containing the probability of 
+#' the score given theta}
 #' }
 #' 
 #' @examples
@@ -520,11 +502,15 @@ r_score = function(parms, items=NULL, booklet_id=NULL, which.draw=NULL)
   theta_function(parms, items=items, booklet=booklet_id, which.draw=which.draw, what='sim')
 }
 
-
+#' @rdname information
+p_score = function(parms, items=NULL, booklet_id=NULL, which.draw=NULL)
+{
+  theta_function(parms, items=items, booklet=booklet_id, which.draw=which.draw, what='pmf')
+}
 
 
 theta_function = function(parms, items=NULL, booklet=NULL, which.draw=NULL, 
-                          what=c('information','expected','sim'))
+                          what=c('information','expected','sim','pmf'))
 {
   what = match.arg(what)
   
@@ -533,7 +519,7 @@ theta_function = function(parms, items=NULL, booklet=NULL, which.draw=NULL,
   
   if(inherits(parms,'data.frame'))
   {
-    out = transform.df.parms(parms,'b',TRUE)
+    out = transform.df.parms(parms,'b',include.zero=TRUE)
     a = out$item_score
     b = out$b
     
@@ -639,9 +625,16 @@ theta_function = function(parms, items=NULL, booklet=NULL, which.draw=NULL,
       res = rscore_item(theta,b=b,a=a,first = fl$first, last = fl$last)
       colnames(res) = fl$item_id
       res
-      
     }
     class(out) = append('sim_func',class(out))
+  } else if(what=='pmf')
+  {
+    out = function(theta)
+    {
+      res = pscore(theta,b=b,a=a,first = fl$first, last = fl$last)
+      t(res)
+    }
+    class(out) = append('pmf_func',class(out))
   }
   
   out
@@ -650,5 +643,6 @@ theta_function = function(parms, items=NULL, booklet=NULL, which.draw=NULL,
 print.inf_func = function(x,...) cat('Information function I(theta)\n')
 print.exp_func = function(x,...) cat('Conditional expected score function E(X|theta)\n')
 print.sim_func = function(x,...) cat('(x_i1, ..., x_in) ~ ENORM([theta])\n\tfunction (theta)\n')
+print.pmf_func = function(x,...) cat('Conditional score distribution P(x_+|theta)\n')
 
 

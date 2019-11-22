@@ -14,14 +14,14 @@ tia_tables(dataSrc, predicate = NULL, type = c("raw", "averaged",
 
 \item{type}{How to present the item level statistics: \code{raw} for each test booklet 
 separately, \code{averaged} averaged over the test booklet in which the item is included,
-with the number of persons as weights, or {compared}, in which case the pvalues, 
+with the number of persons as weights, or \code{compared}, in which case the pvalues, 
 correlations with the sum score (rit), and correlations with the rest score (rit) are 
 shown in separate tables and compared across booklets}
 }
 \value{
 A list containing:
-\item{testStats}{a data frame of statistics at test level} 
-\item{itemStats}{a data frame of statistics at item level}.
+\item{testStats}{a data.frame of statistics at test level} 
+\item{itemStats}{a data.frame (or list if type='compared') of statistics at item level}
 }
 \description{
 Show simple Classical Test Analysis statistics

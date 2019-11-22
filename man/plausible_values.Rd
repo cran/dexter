@@ -11,7 +11,7 @@ plausible_values(dataSrc, parms = NULL, predicate = NULL,
 \arguments{
 \item{dataSrc}{a connection to a dexter database, a matrix, or a data.frame with columns: person_id, item_id, item_score}
 
-\item{parms}{An object returned by function \code{fit_enorm} containing parameter estimates. If parms are provided, item parameters are condidered known. 
+\item{parms}{An object returned by function \code{fit_enorm} containing parameter estimates. If parms are provided, item parameters are considered known. 
 If parms = NULL, plausible values are marginalized over the posterior distribution of the item parameters and uncertainty of the item parameters is taken into account.}
 
 \item{predicate}{an expression to filter data. If missing, the function will use 
@@ -23,7 +23,7 @@ If dataSrc is a data.frame, it must contain the covariate.}
 
 \item{nPV}{Number of plausible values to draw per person.}
 
-\item{use_draw}{When the ENORM was fitted with a Gibbs sampler, this specifies the use of a particular sample of item parameters used to generate the plausibe value(s). If NULL, the posterior means are used. If outside range, the last iteration will be used.}
+\item{use_draw}{When the ENORM was fitted with a Gibbs sampler, this specifies the use of a particular sample of item parameters used to generate the plausible value(s). If NULL, the posterior means are used. If outside range, the last iteration will be used.}
 
 \item{prior.dist}{use a normal prior or a mixture of two normals
 recognised automatically),}

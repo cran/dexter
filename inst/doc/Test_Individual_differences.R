@@ -10,7 +10,7 @@ par_hook = function(before, options, envir)
   }
 }
 knit_hooks$set(par = par_hook)
-options(dexter.progress=FALSE)
+
 library(dexter)
 library(dplyr)
 

@@ -1,14 +1,6 @@
 # common utility functions
 
 
-## Burnin and thinning for different purposes:
-# cal: Bayesian calibration
-# pv: plausible values
-# ps: plausible scores
-Gibbs.settings = list(from.cal = 20, step.cal = 2, 
-                      from.pv = 20, step.pv = 5,
-                      from.ps = 30, step.ps = 1)
-
 .onLoad = function(libname, pkgname) 
 {
   dexter_options = list(dexter.use_tibble=FALSE, dexter.progress=TRUE)
@@ -18,6 +10,52 @@ Gibbs.settings = list(from.cal = 20, step.cal = 2,
     options(dexter_options[to_set])
 
   invisible()
+}
+
+show_progress = function()
+{
+  is.null(getOption("knitr.in.progress")) && getOption("dexter.progress")
+}
+
+pg_start = function() cat('|')
+
+pg_tick = function(step=NULL, nsteps=NULL)
+{
+  if(is.null(step) || is.null(nsteps))
+  {
+    cat('=')
+  } else
+  {
+    w = getOption("width") - nchar('| 100%') - 2L
+    l = as.integer(w * step/nsteps)
+    cat(sprintf('\r|%s%s| %3i%%',strrep('=',l),strrep(' ',w-l),as.integer(100*step/nsteps)))
+  }
+}
+  
+pg_close = function() cat('\n')
+
+## Burnin and thinning for different purposes:
+# cal: Bayesian calibration
+# pv: plausible values
+# ps: plausible scores
+Gibbs.settings = list(from.cal = 20L, step.cal = 2L, start_b='cml',
+                      from.pv = 20L, step.pv = 5L,
+                      from.ps = 1L, step.ps = 1L)
+
+
+
+which_gibbs = function(n_samples, n_gibbs)
+{
+  step = n_gibbs %/% n_samples
+  from = (n_gibbs %% n_samples) + 1L
+  
+  which = 
+    if(step>0)
+      seq(from, n_gibbs, step)
+    else
+      1:n_samples
+  
+  list(step=step, from=from, which=which, enough = step>0)
 }
 
 
@@ -32,29 +70,6 @@ df_format = function(df)
   }
 }
 
-pg_bar_class = setRefClass('progress_bar',
-  fields = list(current='numeric', .min='numeric', .max='numeric', 
-                show='logical', .char='character'),
-  methods = list(
-    close = function() if(show) cat('\n'),
-    tick = function(char=.char, redraw=FALSE)
-    {
-      if(current<.max)
-      {
-        current <<- current + 1
-        if(show) 
-        {
-          if(!redraw) cat(char)
-          else cat(paste0('\r',paste(rep(char, current), collapse='')))
-        }
-      }
-    }))
-
-pg_bar = function(min=0, max=10, initial=0, char='=')
-{
-  pg_bar_class(current=initial, show=getOption('dexter.progress', TRUE),
-               .min=min, .max=max, .char=char)
-}
 
 
 is.date = function(x) inherits(x, "Date")
@@ -65,12 +80,15 @@ add_column = function(df, ...)
 {
   dots = list(...)
   if(is.null(names(dots)) || any(names(dots) == ''))
-     stop('arguments must be named')
+    stop('arguments must be named')
   
   for(nm in names(dots))
   {
     vec = dots[[nm]]
-    stopifnot(length(vec)==1 || nrow(df) == length(vec))
+    if(NROW(df)==0)
+      vec = vec[0]
+    
+    stopifnot(length(vec)==1 || NROW(df) == length(vec))
     df[[nm]] = vec
   }
   
@@ -91,9 +109,11 @@ bind_vertical = function(lst)
 all_trivial_scores = function(scores)
 {
   length(Reduce(function(a,b){out = as.vector(outer(a,b,'+')); if(!anyDuplicated(out)) out else NULL}, 
-                split(scores$item_score, scores$item_id))
+                split(scores$item_score, scores$item_id, drop=TRUE))
   ) > 0
 }
+
+
 
 
 # format string with named arguments
@@ -197,7 +217,7 @@ weighted_quantile = function(x,w,probs)
   }  
   csw = cumsum(w)
   n = sum(w)
-  np = length(probs)
+  #np = length(probs)
   index = 1 + (n - 1) * probs
   lo = floor(index)
   hi = ceiling(index)
@@ -224,6 +244,7 @@ if.else = function(test, yes, no)
 #  basic argument type and attribute checks with error messages
 check_dataSrc = function(x)
 {
+  force(x)
   if(inherits(x, 'dx_resp_data'))
      return(NULL)
   
@@ -240,7 +261,7 @@ check_dataSrc = function(x)
       stop("dataSrc must contain the columns: 'person_id','item_id','item_score'")
     return(NULL)
   }
-  if(inherits(x, 'DBIConnection'))
+  if(is_db(x))
   {
     if(dbIsValid(x)) return(NULL)
     stop('your database connection is no longer valid, you need to reconnect. see: ?open_project for details')
@@ -299,7 +320,7 @@ check_df = function(x, columns=NULL, n_rows=NULL, name = deparse(substitute(x)),
     stop('column(s): ', paste0('`', missing_col, '`',collapse=', '),' must be present in ', name)
   
   if(!is.null(n_rows) && NROW(x)!=n_rows)
-    stop(name, 'must have', n_rows, 'rows')
+    stop('argument`', name, '` must have ', n_rows, ' rows')
   
 }
 
@@ -380,8 +401,18 @@ df_identical = function(a, b)
 is_connected = function(design)
 {
   design = droplevels(design)
-  items = as.matrix(table(design$item_id, design$booklet_id))
-  adj = crossprod(items, items)
+  # usually best via items but with extreme predicates and large data this might lead to 
+  # adj larger than working memory
+  if(nlevels(design$item_id) >= nlevels(design$booklet_id))
+  {
+    items = as.matrix(table(design$item_id, design$booklet_id))
+    adj = crossprod(items, items)
+  } else
+  {
+    booklets = as.matrix(table(design$booklet_id, design$item_id))
+    adj = crossprod(booklets, booklets)
+  }
+    
   mode(adj) = 'integer'
   
   all(ds_connected_groups(adj)==1)

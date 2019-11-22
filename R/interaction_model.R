@@ -98,11 +98,8 @@ fit_inter_ = function(dataSrc, qtpredicate = NULL, env=NULL, regs=TRUE)
 
   if(regs)
   {
-    # add the regressions, used for plotting
-    mm = sweep(model.matrix(~0 + as.character(ssIS$item_id)), 1, ssIS$item_score, '*')
-    est$itrRM = as.data.frame(crossprod(mm, est$ctrRM))
-    est$itrIM = as.data.frame(crossprod(mm, est$ctrIM))
-    row.names(est$itrRM) = row.names(est$itrIM) = as.character(ssI$item_id)
+    est$itrRM = rowsum(est$ctrRM * ssIS$item_score, ssIS$item_id, reorder=FALSE)
+    est$itrIM = rowsum(est$ctrIM * ssIS$item_score, ssIS$item_id, reorder=FALSE)
   }
   
   output = list(est = est, 
@@ -148,7 +145,7 @@ fit_domains = function(dataSrc, item_property, predicate = NULL)
 
   respData = get_resp_data(dataSrc, qtpredicate, extra_columns = item_property, env = env, retain_person_id=FALSE) %>%
 	  intersection() %>%
-    polytomize(item_property, protect_x = !inherits(dataSrc,'DBIconnection')) %>%
+    polytomize(item_property, protect_x = !is_db(dataSrc)) %>%
     fit_inter_()
 
 }
@@ -351,16 +348,32 @@ coef.rim = function(object, ...)
 }
 
 
-simIM = function(m, scores)
+#' Simulation from the interaction model
+#'
+#' Simulate item scores conditional on test scores using the interaction model
+#'
+#' @param m an object produced by function \code{fit_inter}
+#' @param scores vector of test scores
+#' 
+#' @return
+#' a matrix with item scores, one column per item and one row per test score. Row order
+#' equal to scores
+#' 
+r_score_IM = function(m, scores)
 {
+
   first = m$inputs$ssI$first
   last = m$inputs$ssI$last
   a = m$inputs$ssIS$item_score
   bIM = m$est$bIM
   cIM = m$est$cIM
   maxs = sum(a[last])
+
+  if(any(scores>maxs))
+    stop('scores may not be larger than the maximum score on the test')
   
   scoretab = score_tab_single(scores, maxs)
+  
   s = sampleIM(bIM,cIM,a,as.integer(first-1L), as.integer(last-1L), scoretab)
 
   if(scoretab[1]>0)
@@ -376,4 +389,3 @@ simIM = function(m, scores)
 
   s
 }
-

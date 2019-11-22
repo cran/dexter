@@ -78,15 +78,15 @@ get_resp_data = function(dataSrc, qtpredicate=NULL,
   if(is.null(env)) 
     env = caller_env()
   
-  if(inherits(dataSrc,'DBIConnection'))
+  if(is_db(dataSrc))
     protect_x = FALSE
   
-  booklet_safe = is_bkl_safe(dataSrc, qtpredicate) 
+  booklet_safe = is_bkl_safe(dataSrc, qtpredicate, env) 
   
 
   # special case that can be done much faster
   # merge_within person could be accomodated, seems not much use though if we lose booklet id
-  if(summarised && inherits(dataSrc,'DBIConnection') && booklet_safe && !merge_within_persons)
+  if(summarised && is_db(dataSrc) && booklet_safe && !merge_within_persons)
   {
     columns = union(extra_columns, c('person_id','booklet_id'))
     
@@ -140,18 +140,19 @@ get_resp_data = function(dataSrc, qtpredicate=NULL,
                           "WHERE item_id IN(",items_in,");"))
         } else
         {
+		      pred_sql = qtpredicate_to_sql(qtpredicate, dataSrc, env)	
           itm_sc = try(dbGetQuery(dataSrc,
                           paste("SELECT DISTINCT item_id, item_score FROM", 
-                          get_cte(dataSrc, union(c('item_id','item_score'), all.vars(qtpredicate))),
-                          qtpredicate2where(qtpredicate, dataSrc, env),
+                          get_cte(dataSrc, union(c('item_id','item_score'), pred_sql$db_vars)),
+                          pred_sql$where,
                           "AND item_id IN(",items_in,");")), silent=TRUE)
           if(inherits(itm_sc,'try-error'))
           {
             itm_sc = dbGetQuery(dataSrc,
                        paste("SELECT DISTINCT ",
-                             paste(union(c('item_id','item_score'), all.vars(qtpredicate)),collapse=','),
+                             paste(union(c('item_id','item_score'), pred_sql$db_vars),collapse=','),
                              "FROM", 
-                             get_cte(dataSrc, union(c('item_id','item_score'), all.vars(qtpredicate))),
+                             get_cte(dataSrc, union(c('item_id','item_score'), pred_sql$db_vars)),
                              "WHERE item_id IN(",items_in,");"))
             itm_sc = itm_sc[eval_tidy(qtpredicate, data=itm_sc, env=env) , c('item_id','item_score')]
           }
@@ -199,7 +200,7 @@ get_resp_data = function(dataSrc, qtpredicate=NULL,
 
   
   # very common case, saves .5 seconds with letting from_df sort it out
-  if(booklet_safe && inherits(dataSrc,'DBIConnection') && !summarised)
+  if(booklet_safe && is_db(dataSrc) && !summarised)
   {
     x$person_id = ffactor(x$person_id, 
                           dbGetQuery(dataSrc,'SELECT person_id FROM dxpersons 
@@ -478,7 +479,7 @@ resp_data.from_df = function(x, extra_columns=NULL, summarised=FALSE,
       } 
     } else
     {
-      lvls = sprintf(paste0("%0",ceiling(log10(nrow(res$map_booklet))),'i'), 1:nrow(res$map_booklet))
+      lvls = sprintf(paste0("bk%0",ceiling(log10(nrow(res$map_booklet))),'i'), 1:nrow(res$map_booklet))
     }
     class(x$booklet_id) = 'factor'
     class(design$booklet_id) = 'factor'
@@ -525,7 +526,7 @@ resp_data.from_matrix = function(X, summarised = summarised, retain_person_id = 
     maxs = max(X, na.rm=TRUE) 
     # item_score <= maxs is necessary to prevent out of bounds in C
     parms_check = parms_check %>%
-      mutate(item_id = ffactor(as.character(.data$item_id), levels = colnames(X),as_int=TRUE)) %>%
+      mutate(item_id = ffactor(as.character(.data$item_id), levels = sort(colnames(X)),as_int=TRUE)) %>%
       filter(!is.na(.data$item_id) & .data$item_id <= ncol(X) & .data$item_score <= maxs) %>%
       arrange(.data$item_id)
     
@@ -728,4 +729,23 @@ by.dx_resp_data = function (data, INDICES, FUN, ..., simplify = TRUE)
     do.call(FUN, append(list(r),args))
   }, 
   simplify = simplify)
+}
+
+
+
+# compute new levels for item_id in respData
+# returns items in same order with new factor levels (underlying integer is different)
+# caller should replace levels of item_id in respData by new levels of items
+re_factor_item_id = function(respData, items)
+{
+  rd_lev = levels(respData$design$item_id)
+  itm_lev = levels(items)
+  if(length(rd_lev) != length(itm_lev) || !all(rd_lev==itm_lev))
+  {
+    new_lev = c(rd_lev, setdiff(itm_lev,rd_lev))
+    items = match(itm_lev, new_lev)[as.integer(items)]
+    class(items) = 'factor'
+    levels(items) = new_lev
+  }
+  items
 }

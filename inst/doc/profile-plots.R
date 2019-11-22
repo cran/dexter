@@ -22,7 +22,7 @@ profile_plot(db, item_property='mode', covariate='gender', booklet_id=='agg')
 ## ----frq, echo=FALSE-----------------------------------------------------
 rownames(fq) = c(0,1,2)
 colnames(fq) = c(0,1,2)
-fq
+knitr::kable(fq)
 
 ## ---- fig1, echo=FALSE,fig.align='center', out.extra='style="margin-left: -30px; margin-top: -45px;"'----
 cloud(fq, panel.3d.cloud = panel.3dbars,

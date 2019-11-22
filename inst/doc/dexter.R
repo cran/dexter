@@ -10,7 +10,6 @@ par_hook = function(before, options, envir)
   }
 }
 knit_hooks$set(par = par_hook)
-options(dexter.progress=FALSE)
 
 
 ## ---- message=FALSE------------------------------------------------------
@@ -35,7 +34,7 @@ head(verbAggrProperties)
 
 ## ------------------------------------------------------------------------
 get_booklets(db)
-get_items(db)
+head(get_items(db))
 get_persons(db) %>% 
   glimpse()
 

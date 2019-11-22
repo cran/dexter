@@ -15,7 +15,7 @@ standards_3dc(parms, design)
 \arguments{
 \item{parms}{parameters object returned from fit_enorm}
 
-\item{design}{a data.frame with columns `cluster_id` and `item_id`}
+\item{design}{a data.frame with columns `cluster_id`, `item_id` and optionally `booklet_id`}
 
 \item{object}{an object containing parameters for the 3DC standard setting procedure}
 

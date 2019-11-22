@@ -226,6 +226,12 @@ test_that('sql translation',
   expect_equal(trans(a == paste(b,'c'), 'a','sqlite'), "\"a\" = \"b\"||' '||'c'")
   expect_equal(trans(a == paste(b,'c'), 'a', 'ansi'), "\"a\" = CONCAT_WS(' ',\"b\",'c')")
   
+  # get
+  v = 'gender'
+  expect_equal(trans(get(v)=='bla','gender'),
+               '"gender" = \'bla\'')
+  
+  
   # named and unnamed arguments
   expect_equal(trans(b==substr(a,4,7),c('a','b')),
                trans(b==substr(a,stop=7,4),c('a','b')))
@@ -265,4 +271,40 @@ test_that('sql translation',
 })    
   
 
+test_that('variable names cross sql',
+{
+  # variable names are lowercase in sql and do not support special characters such as a dot
+  # We make no effort to support dots and such but we do make an effort to support case mismatch
+  
+  # If a variable does not exist in the db and does not exist in the environment 
+  # but it does exists in the db with another case, it should work.
+  
+  db = start_new_project(verbAggrRules, ":memory:", person_properties=list(Gender='<NA>'))
+  add_booklet(db, verbAggrData, "agg")
+  
+  
+  expect_message({rsp = get_responses(db,Gender=='Male')},
+                 'Gender.*gender')
+  
+  rsp1 = get_responses(db,gender=='Male')
+  
+  # force non sql evaluation by using grepl, use capital G->Gender
+  expect_message({rsp2 = get_responses(db, grepl('^male',Gender,ignore.case = TRUE))},
+                 'Gender.*gender')
+  
+  expect_identical(table(rsp$item_score), table(rsp1$item_score),
+                   label='sql capital versus non capital var names, expect equal results. ')
+  
+  expect_identical(table(rsp1$item_score), table(rsp2$item_score),
+                   label='case mismatch sql non sql should not cause a difference, expect equal results. ')
+  
+  
+  # test if unknown names fail
+  a = 1
+  
+  expect_error({get_responses(db,item_id==a | gndr=='Male')},
+               "'gndr' not found")
+  
+  close_project(db)
 
+})

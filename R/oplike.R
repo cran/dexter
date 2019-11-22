@@ -229,7 +229,7 @@ start_new_project_from_oplm = function(dbname, scr_path, dat_path,
       
       dbRollback(db)  
       dbDisconnect(db)
-      stop(e, .call=FALSE)
+      stop(e)
     }, on_error_rollback=FALSE)
   return(db)
 }

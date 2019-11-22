@@ -11,12 +11,12 @@
 #' @param predicate An optional expression to subset data, if NULL all data is used
 #' @param type How to present the item level statistics: \code{raw} for each test booklet 
 #' separately, \code{averaged} averaged over the test booklet in which the item is included,
-#' with the number of persons as weights, or {compared}, in which case the pvalues, 
+#' with the number of persons as weights, or \code{compared}, in which case the pvalues, 
 #' correlations with the sum score (rit), and correlations with the rest score (rit) are 
 #' shown in separate tables and compared across booklets
 #' @return A list containing:
-#' \item{testStats}{a data frame of statistics at test level} 
-#' \item{itemStats}{a data frame of statistics at item level}.
+#' \item{testStats}{a data.frame of statistics at test level} 
+#' \item{itemStats}{a data.frame (or list if type='compared') of statistics at item level}
 #'
 tia_tables = function(dataSrc, predicate = NULL, type=c('raw','averaged','compared')) {
   type = match.arg(type)
@@ -33,7 +33,8 @@ tia_tables = function(dataSrc, predicate = NULL, type=c('raw','averaged','compar
   {
     itemStats = select(ti, .data$booklet_id, .data$item_id, .data$meanScore, .data$sdScore, 
                            .data$maxScore, .data$pvalue, .data$rit, .data$rir, .data$n) %>%
-      mutate_if(is.factor, as.character)
+      mutate_if(is.factor, as.character) %>%
+      df_format()
     
   } else if(type=='averaged')
   {
@@ -48,7 +49,8 @@ tia_tables = function(dataSrc, predicate = NULL, type=c('raw','averaged','compar
                  rir=weighted.mean(.data$rir, w=.data$n, na.rm=TRUE),
                  n=sum(.data$n)) %>%
       ungroup() %>%
-      mutate_if(is.factor, as.character)
+      mutate_if(is.factor, as.character) %>%
+      df_format()
   } else
   {
     ti = mutate_if(ti, is.factor, as.character)
@@ -82,6 +84,6 @@ tia_tables = function(dataSrc, predicate = NULL, type=c('raw','averaged','compar
     ungroup() %>%
     mutate_if(is.factor, as.character)
   
-  list(itemStats=df_format(itemStats), testStats=df_format(testStats))
+  list(itemStats=itemStats, testStats=df_format(testStats))
 }
 

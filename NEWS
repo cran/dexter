@@ -1,3 +1,23 @@
+# dexter 1.0.1
+
+* weighted likelihood estimate option in `ability()` and `ability_tables()`
+
+* added function `r_score_IM()` for simulation of item responses according to the interaction model
+
+* added function p_score which provides conditional score distributions
+
+* ability, plausible_values and plausible_scores accept a tidy data.frame of parameters
+
+* it is now possible to use `get()` in predicates
+
+* bugfix for mixed up plots in the interaction model when using a matrix dataSrc
+
+* bugfix: reinstated check for unobserved zero score categories in fit_enorm (check was accidentally removed in 1.0)
+
+* bugfix: uppercase letters in variable names in profile_plot work again
+
+
+
 # dexter 1.0.0
 
 ## Breaking changes

@@ -15,7 +15,7 @@ img{ border:none;}
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE, dev='CairoPNG') 
-options(dexter.progress=FALSE)
+
 library(dplyr)
 library(ggplot2)
 ```
@@ -166,7 +166,7 @@ abline(0,1,lty=2, col="grey")
 
 Other packages and functions may produce prettier plots --- but can they do it without complete data?
 
-```{r, echo=FALSE}
+```{r, include=FALSE}
 close_project(db)
 
 ```
