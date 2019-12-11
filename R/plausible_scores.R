@@ -40,6 +40,7 @@ plausible_scores = function(dataSrc, parms=NULL, predicate=NULL, items=NULL,
     df_format()
 }
 
+# to do: this has become a messy function
 plausible_scores_ = function(dataSrc, parms=NULL, qtpredicate=NULL, items=NULL, 
                              covariates=NULL, keep.observed=TRUE, nPS=1, env=NULL,
                              merge_within_persons=FALSE)
@@ -151,7 +152,7 @@ plausible_scores_ = function(dataSrc, parms=NULL, qtpredicate=NULL, items=NULL,
     bkList = lapply(split(design, design$booklet_id), 
                     function(bk_items){ items %>% anti_join(bk_items, by='item_id') %>% arrange(.data$first)})
     
-    
+    # to do: message when nothing new is generated 
     pv = pv %>%
       group_by(.data$booklet_id) %>%
       do({

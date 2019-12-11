@@ -147,10 +147,10 @@ sim_PV3 = function(theta, delta, group) {
   parms = fit_enorm(simulated_data)
   
   # because our data structure gets multi dimensional by the inclusion of groups
-  # we have to switch to a tidy format
+  # we  switch to a tidy format
   simulated_data = simulated_data %>%
     as_tibble() %>%
-    mutate(person_id=1:n(), group=group) %>%
+    mutate(person_id=row_number(), group=group) %>%
     gather(key='item_id', value='item_score', -person_id, -group)
     
   pv = plausible_values(simulated_data, parms, covariates='group',nPV = 10)

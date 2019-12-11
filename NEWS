@@ -1,3 +1,9 @@
+# dexter 1.0.2
+
+* solved bug: accidental change of input data.frame in ability
+
+* solved bug: unnecessary error message when input parameters are data.frame
+
 # dexter 1.0.1
 
 * weighted likelihood estimate option in `ability()` and `ability_tables()`

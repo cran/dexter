@@ -187,7 +187,27 @@ test_that('merging works',
 
 
 # to also do: check parms and profiles
+
+test_that('input data.frames survives',  {
+  # do new project, guarantees nice ordering
+  db = start_new_project(verbAggrRules, ":memory:")
+  add_booklet(db, verbAggrData, "agg")        
   
+  r = get_responses(db)
+  r2 = rlang::duplicate(r)
+  
+  v=get_resp_data(r,summarised=TRUE)
+  v=get_resp_data(r,summarised=FALSE)
+  
+  expect_identical(r,r2, label="get_resp_data should not mutilate input")  
+  
+  v=get_resp_data(r, summarised=TRUE, protect_x=FALSE)
+  
+  expect(!all(r$item_score==r2$item_score), 'when protect_x is false we would like some input mutilation')
+  
+  
+  close_project(db)        
+})
 
 
 

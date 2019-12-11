@@ -374,8 +374,8 @@ resp_data.from_df = function(x, extra_columns=NULL, summarised=FALSE,
   if(!is.null(parms_check))
   {
     suppressWarnings({
-      uncalibrated = dplyr::setdiff(x[,c('item_id','item_score')], 
-                                    parms_check[,c('item_id','item_score')])})
+      uncalibrated = dplyr::setdiff(x[x$item_score>0,c('item_id','item_score')], 
+                                    parms_check[parms_check$item_score>0, c('item_id','item_score')])}) 
     
     if(nrow(uncalibrated) > 0)
     {
@@ -408,16 +408,16 @@ resp_data.from_df = function(x, extra_columns=NULL, summarised=FALSE,
 
     x$booklet_id = 1L
     class(x$booklet_id) = 'factor'
-    levels(x$booklet_id) = 'bkl'
+    levels(x$booklet_id) = 'bkl' 
     booklet_safe = FALSE
   }
   
   if(summarised && protect_x)
   {
-    if(ppoint(x$item_score) != pointers$item_score)
+    if(ppoint(x$item_score) == pointers$item_score)
       x$item_score = duplicate(x$item_score)
     
-    if(ppoint(x$person_id) != pointers$person_id)
+    if(ppoint(x$person_id) == pointers$person_id)
       x$person_id = duplicate(x$person_id)
   }  
   
@@ -444,7 +444,7 @@ resp_data.from_df = function(x, extra_columns=NULL, summarised=FALSE,
     
   } else
   {
-    if(protect_x && ppoint(x$item_score) != pointers$item_score)
+    if(protect_x && ppoint(x$item_score) == pointers$item_score)
       x$item_score = duplicate(x$item_score)
     
     if(summarised)

@@ -256,14 +256,16 @@ pv = function(x, design, b, a, nPV, from = NULL, by = NULL, prior.dist = c("norm
     if (nrow(b)<nIter){
       stop(paste("at least", as.character(nIter), "samples of item parameters needed in function pv"))
     }
-
+    b.step = as.integer(nrow(b)/nIter)
+    
+    
     for(iter in 1:nIter)
     {
       if (prior.dist == "mixture")
       {
         x = x %>% 
           group_by(.data$booklet_id, .data$grp) %>%
-          mutate(PVX = pv_recycle(b[iter,], a, 
+          mutate(PVX = pv_recycle(b[iter*b.step,], a, 
                                   design[[.data$booklet_id[1]]]$first, 
                                   design[[.data$booklet_id[1]]]$last, 
                                   .data$booklet_score, 1, 
@@ -276,7 +278,7 @@ pv = function(x, design, b, a, nPV, from = NULL, by = NULL, prior.dist = c("norm
       {
         x = x %>% 
           group_by(.data$booklet_id,.data$pop) %>%
-          mutate(PVX = pv_recycle(b[iter,], a, 
+          mutate(PVX = pv_recycle(b[iter*b.step,], a, 
                                   design[[.data$booklet_id[1]]]$first, 
                                   design[[.data$booklet_id[1]]]$last, 
                                   .data$booklet_score, 1, 

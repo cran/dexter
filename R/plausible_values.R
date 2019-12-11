@@ -72,11 +72,13 @@ plausible_values = function(dataSrc, parms=NULL, predicate=NULL, covariates=NULL
   check_dataSrc(dataSrc)
   check_num(nPV, .length=1, .min=1)
   
-  plausible_values_(dataSrc, parms, qtpredicate=qtpredicate, covariates=covariates, nPV=nPV, 
-                    use_draw=use_draw, env=env,prior.dist = prior.dist ,
-                    merge_within_persons=merge_within_persons) %>%
-    mutate_if(is.factor, as.character) %>%
-    df_format()
+  # pipe seems to cause problems on apple in pv vignette, so this is nested
+  df_format(
+    mutate_if(
+      plausible_values_(dataSrc, parms, qtpredicate=qtpredicate, covariates=covariates, nPV=nPV, 
+                      use_draw=use_draw, env=env,prior.dist = prior.dist ,
+                      merge_within_persons=merge_within_persons), 
+    is.factor, as.character))
 }
 
 # to~do: ignore covariate when (some) groups contain to few, <5 say, persons. Add warning.
@@ -139,9 +141,12 @@ plausible_values_ = function(dataSrc, parms=NULL, qtpredicate=NULL, covariates=N
     if(parms$inputs$method == 'Bayes' )
     {
       if(!is.null(use_draw))
+      {
         b = b[use_draw,]
-      else if (nrow(b)<nIter.enorm ) 
+      } else if (nrow(b)<nIter.enorm ) 
+      {
         stop(paste("To produce", nPV, "plausible values, use at least", nIter.enorm, "iterations in fit_enorm" ))
+      } 
     }  
   }
   x = respData$x
