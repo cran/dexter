@@ -1,3 +1,9 @@
+# dexter 1.0.3
+
+* fixed bug that caused an error message on some apple computers when using a matrix datasource
+
+* removed unit tests for Solaris as we have no way to test on solaris, in effect this means dexter does not support solaris anymore
+
 # dexter 1.0.2
 
 * solved bug: accidental change of input data.frame in ability

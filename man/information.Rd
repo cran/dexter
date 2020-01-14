@@ -35,7 +35,7 @@ Each function returns a new function which accepts a vector of theta's. These re
 \item{expected_score}{an equal length vector with the expected score at each value of theta}
 \item{r_score}{a matrix with length(theta) rows and one column for each item containing simulated scores based on theta. 
 To obtain test scores, use rowSums on this matrix}
-\item{p_score}{a matrix with length(theta) rows and one column for each possible score containing the probability of 
+\item{p_score}{a matrix with length(theta) rows and one column for each possible sumscore containing the probability of 
 the score given theta}
 }
 }

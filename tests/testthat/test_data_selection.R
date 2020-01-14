@@ -49,6 +49,7 @@ expect_equal_respData = function(a,b, info='equal respData', ignore_booklet_leve
 # to do: check no grouping etc
 expect_valid_respData = function(respData, msg='respData')
 {
+  skip_on_os('solaris')
   expect_true(is.integer(respData$x$person_id) || is.factor(respData$x$person_id),
               info = sprintf("%s - x$person_id is not a factor but '%s'",
                              info, typeof(respData$x$person_id)))
@@ -105,6 +106,7 @@ expect_valid_respData = function(respData, msg='respData')
 
 test_that('merging works',
 {
+  skip_on_os('solaris')
   # a set connected over persons only
   rsp = tibble(person_id = rep(rep(1:50,each=20),2), 
                booklet_id = rep(1:2, each=1000),
@@ -189,6 +191,7 @@ test_that('merging works',
 # to also do: check parms and profiles
 
 test_that('input data.frames survives',  {
+  skip_on_os('solaris')
   # do new project, guarantees nice ordering
   db = start_new_project(verbAggrRules, ":memory:")
   add_booklet(db, verbAggrData, "agg")        
@@ -213,7 +216,7 @@ test_that('input data.frames survives',  {
 
 test_that('get responses works correctly with predicates',
 {
-  
+  skip_on_os('solaris')
   db = open_project('../verbAggression.db')
   
   #two ways to do the same
@@ -230,6 +233,7 @@ test_that('get responses works correctly with predicates',
 
 test_that('sql translation',
 {
+  skip_on_os('solaris')
   trans = function(x, vars=NULL, variant='sqlite')
   {
     env = rlang::caller_env()
@@ -293,6 +297,7 @@ test_that('sql translation',
 
 test_that('variable names cross sql',
 {
+  skip_on_os('solaris')
   # variable names are lowercase in sql and do not support special characters such as a dot
   # We make no effort to support dots and such but we do make an effort to support case mismatch
   

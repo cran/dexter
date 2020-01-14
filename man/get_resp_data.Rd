@@ -2,12 +2,15 @@
 % Please edit documentation in R/resp_data.R
 \name{get_resp_data}
 \alias{get_resp_data}
+\alias{get_resp_matrix}
 \title{Functions for developers}
 \usage{
 get_resp_data(dataSrc, qtpredicate = NULL, extra_columns = NULL,
   summarised = FALSE, env = NULL, protect_x = TRUE,
   retain_person_id = TRUE, merge_within_persons = FALSE,
   parms_check = NULL)
+
+get_resp_matrix(dataSrc, qtpredicate = NULL, env = NULL)
 }
 \arguments{
 \item{dataSrc}{data.frame, integer matrix, dexter database or `dx_resp_data` object}
@@ -29,14 +32,21 @@ get_resp_data(dataSrc, qtpredicate = NULL, extra_columns = NULL,
 \item{parms_check}{data.frame of item_id, item_score to check for coverage of data}
 }
 \value{
-list of type `dx_resp_data` containing:
 \describe{
-\item{when summarised=FALSE}{
-  x: tibble(person_id, booklet_id, item_id, item_score, booklet_score <, extra_columns>)}
-\item{when summarised=TRUE}{
-  x: tibble(person_id, booklet_id, booklet_score <, extra_columns>)}}
+\item{get_resp_data}{ returns a list with class `dx_resp_data` with elements
+\describe{
+\item{x}{
+when summarised is FALSE, a tibble(person_id, booklet_id, item_id, item_score, booklet_score [, extra_columns>]), sorted in such a way that
+  all rows pertaining to the same person-booklet are together
+  
+when summarised is TRUE, a tibble(person_id, booklet_id, booklet_score [, extra_columns])}
+\item{design}{
+  tibble(booklet_id, item_id), sorted
+  }}}
 
-design: tibble(booklet_id, item_id), sorted
+\item{get_resp_matrix}{returns a matrix of item scores as commonly used in other IRT packages, facilitating
+easy connection of your own package to the data management capabilities of dexter}
+}
 }
 \description{
 These functions are meant for people who want to develop their own models based

@@ -379,9 +379,6 @@ calibrate_CML <- function(scoretab, design, sufI, a, first, last, nIter, fixed_b
     b=fixed_b
     ni_free=sum(is.na(fixed_b[last]))
     b[update_set]=1
-    #nn=0
-    #for (bl in 1:nb) nn=nn+booklet[[bl]]$m
-    #nn=nn*ni_free
     nn = ni_free * sum(scoretab$N)
     
     converged=FALSE

@@ -34,15 +34,21 @@ ffactor = function (x, levels=NULL, as_int=FALSE)
 #' @param parms_check data.frame of item_id, item_score to check for coverage of data
 #' 
 #' @return
-#' list of type `dx_resp_data` containing:
 #' \describe{
-#' \item{when summarised=FALSE}{
-#'   x: tibble(person_id, booklet_id, item_id, item_score, booklet_score <, extra_columns>)}
-#' \item{when summarised=TRUE}{
-#'   x: tibble(person_id, booklet_id, booklet_score <, extra_columns>)}}
+#' \item{get_resp_data}{ returns a list with class `dx_resp_data` with elements
+#' \describe{
+#' \item{x}{
+#' when summarised is FALSE, a tibble(person_id, booklet_id, item_id, item_score, booklet_score [, extra_columns>]), sorted in such a way that
+#'   all rows pertaining to the same person-booklet are together
+#'   
+#' when summarised is TRUE, a tibble(person_id, booklet_id, booklet_score [, extra_columns])}
+#' \item{design}{
+#'   tibble(booklet_id, item_id), sorted
+#'   }}}
 #'
-#' design: tibble(booklet_id, item_id), sorted
-#'
+#' \item{get_resp_matrix}{returns a matrix of item scores as commonly used in other IRT packages, facilitating
+#' easy connection of your own package to the data management capabilities of dexter}
+#' }
 get_resp_data = function(dataSrc, qtpredicate=NULL, 
                          extra_columns=NULL, 
                          summarised=FALSE, env=NULL,
@@ -474,12 +480,12 @@ resp_data.from_df = function(x, extra_columns=NULL, summarised=FALSE,
       if(anyDuplicated(lvls))
       {
         # one to many, e.g. response!='NA'
-        spr = paste0("%0",ceiling(log10(length(lvls))),'i-%s')
+        spr = paste0("%0",ceiling(log10(length(lvls)+1)),'i-%s')
         lvls = sprintf(spr,1:length(lvls), lvls)
       } 
     } else
     {
-      lvls = sprintf(paste0("bk%0",ceiling(log10(nrow(res$map_booklet))),'i'), 1:nrow(res$map_booklet))
+      lvls = sprintf(paste0("bk%0",ceiling(log10(nrow(res$map_booklet)+1)),'i'), 1:nrow(res$map_booklet))
     }
     class(x$booklet_id) = 'factor'
     class(design$booklet_id) = 'factor'
@@ -495,8 +501,8 @@ resp_data.from_df = function(x, extra_columns=NULL, summarised=FALSE,
 }
 
 
-resp_data.from_matrix = function(X, summarised = summarised, retain_person_id = retain_person_id,
-                                 merge_within_persons = merge_within_persons, parms_check = parms_check )
+resp_data.from_matrix = function(X, summarised = FALSE, retain_person_id = TRUE,
+                                 merge_within_persons = FALSE, parms_check = NULL )
 {
 
   if(merge_within_persons)
@@ -551,7 +557,7 @@ resp_data.from_matrix = function(X, summarised = summarised, retain_person_id = 
   }
   
   nbk = max(out$design$booklet_id)
-  bkstr = paste0('bk%0', ceiling(pmin(log10(nbk),3)),'i')
+  bkstr = paste0('bk%0', ceiling(pmax(log10(nbk+1),3)),'i')
   
   class(out$x$booklet_id) = class(out$design$booklet_id) = 'factor' 
   levels(out$x$booklet_id) = levels(out$design$booklet_id) = sprintf(bkstr,1:nbk)
@@ -749,3 +755,38 @@ re_factor_item_id = function(respData, items)
   }
   items
 }
+
+#' @rdname get_resp_data
+get_resp_matrix = function(dataSrc, qtpredicate=NULL, env=NULL)
+{
+  if(is.matrix(dataSrc))
+    stop('dataSrc is already a matrix')
+  
+  if(inherits(dataSrc,'dx_resp_data'))
+  {
+    if(!is.null(qtpredicate))
+      stop('predicates on resp_data objects are not yet supported')
+    x = dataSrc$x
+  } else
+  {
+    x = get_responses_(dataSrc, qtpredicate = qtpredicate, columns = c('person_id','item_id','item_score'), env = env) 
+
+    if(!is.factor(x$person_id))
+      x$person_id = ffactor(x$person_id)
+    
+    if(!is.factor(x$item_id))
+      x$item_id = ffactor(x$item_id)
+  }
+  out = matrix(NA_integer_, nlevels(x$person_id),nlevels(x$item_id))
+  fill_resp_matrix(x$person_id, x$item_id, x$item_score, out)
+  rownames(out) = levels(x$person_id)
+  colnames(out) = levels(x$item_id)
+  out
+}
+
+
+
+
+
+
+

@@ -1,7 +1,7 @@
 
 
 ##########################################
-#' Generate plausible testscores
+#' Generate plausible test scores
 #'
 #' Generate plausible i.e., posterior predictive sumscores on a set of items. 
 #' A typical use of this function is to generate plausible scores on

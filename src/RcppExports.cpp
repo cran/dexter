@@ -42,6 +42,19 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// fill_resp_matrix
+void fill_resp_matrix(const IntegerVector& person_id, const IntegerVector& item_id, const IntegerVector& item_score, arma::imat& out);
+RcppExport SEXP _dexter_fill_resp_matrix(SEXP person_idSEXP, SEXP item_idSEXP, SEXP item_scoreSEXP, SEXP outSEXP) {
+BEGIN_RCPP
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const IntegerVector& >::type person_id(person_idSEXP);
+    Rcpp::traits::input_parameter< const IntegerVector& >::type item_id(item_idSEXP);
+    Rcpp::traits::input_parameter< const IntegerVector& >::type item_score(item_scoreSEXP);
+    Rcpp::traits::input_parameter< arma::imat& >::type out(outSEXP);
+    fill_resp_matrix(person_id, item_id, item_score, out);
+    return R_NilValue;
+END_RCPP
+}
 // ds_connected_groups
 IntegerVector ds_connected_groups(const IntegerMatrix& a);
 RcppExport SEXP _dexter_ds_connected_groups(SEXP aSEXP) {
@@ -397,20 +410,6 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
-// test
-arma::vec test(const arma::ivec& a, const arma::vec& b, const arma::ivec& first, const arma::ivec& last);
-RcppExport SEXP _dexter_test(SEXP aSEXP, SEXP bSEXP, SEXP firstSEXP, SEXP lastSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< const arma::ivec& >::type a(aSEXP);
-    Rcpp::traits::input_parameter< const arma::vec& >::type b(bSEXP);
-    Rcpp::traits::input_parameter< const arma::ivec& >::type first(firstSEXP);
-    Rcpp::traits::input_parameter< const arma::ivec& >::type last(lastSEXP);
-    rcpp_result_gen = Rcpp::wrap(test(a, b, first, last));
-    return rcpp_result_gen;
-END_RCPP
-}
 // H_im
 void H_im(const arma::ivec& a, const arma::vec& b, const arma::vec& c, const arma::ivec& first, const arma::ivec& last, const arma::ivec& sufI, const arma::ivec& sufC, const arma::ivec& scoretab, arma::mat& H, arma::vec& Grad, arma::mat& pi_s, const bool diagonal);
 RcppExport SEXP _dexter_H_im(SEXP aSEXP, SEXP bSEXP, SEXP cSEXP, SEXP firstSEXP, SEXP lastSEXP, SEXP sufISEXP, SEXP sufCSEXP, SEXP scoretabSEXP, SEXP HSEXP, SEXP GradSEXP, SEXP pi_sSEXP, SEXP diagonalSEXP) {
@@ -686,6 +685,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_dexter_fast_factor", (DL_FUNC) &_dexter_fast_factor, 2},
     {"_dexter_fast_factor_lev", (DL_FUNC) &_dexter_fast_factor_lev, 3},
     {"_dexter_ppoint", (DL_FUNC) &_dexter_ppoint, 1},
+    {"_dexter_fill_resp_matrix", (DL_FUNC) &_dexter_fill_resp_matrix, 4},
     {"_dexter_ds_connected_groups", (DL_FUNC) &_dexter_ds_connected_groups, 1},
     {"_dexter_unequal_categories_C", (DL_FUNC) &_dexter_unequal_categories_C, 5},
     {"_dexter_make_booklets", (DL_FUNC) &_dexter_make_booklets, 6},
@@ -709,7 +709,6 @@ static const R_CallMethodDef CallEntries[] = {
     {"_dexter_E_booklets", (DL_FUNC) &_dexter_E_booklets, 7},
     {"_dexter_NR_booklets", (DL_FUNC) &_dexter_NR_booklets, 10},
     {"_dexter_calibrate_Bayes_C", (DL_FUNC) &_dexter_calibrate_Bayes_C, 21},
-    {"_dexter_test", (DL_FUNC) &_dexter_test, 4},
     {"_dexter_H_im", (DL_FUNC) &_dexter_H_im, 12},
     {"_dexter_meanElSym", (DL_FUNC) &_dexter_meanElSym, 9},
     {"_dexter_E_booklets_mean", (DL_FUNC) &_dexter_E_booklets_mean, 7},

@@ -3,7 +3,7 @@
 using namespace arma;
 
 
-// argument g can be either a std::vector<long double> or an arma::vec 
+
 void ElSym(const arma::vec& b, const arma::ivec& a, const arma::ivec& first, const arma::ivec& last, const int item1, const int item2, const int nI, const int mS,  
 			std::vector<long double>& g) 
 {
@@ -569,35 +569,6 @@ Rcpp::List calibrate_Bayes_C(const arma::ivec& a, const arma::ivec& first, const
 }
 
 
-// [[Rcpp::export]]
-arma::vec test(const arma::ivec& a, const arma::vec& b, const arma::ivec& first, const arma::ivec&  last)
-{
-	arma::vec out(b.n_elem,fill::ones);
-	double f = b[1];
-	const int nI = first.n_elem;
-	
-	for(int i=0; i<nI;i++)
-		for(int j = first[i]+1; j<= last[i]; j++)
-			out(j) = b(j) /  std::pow(f, (double(a(j)))/a(1));
-
-	return(out);
-}
-
-/*
-a=as.integer(c(0,1,0,1,0,1))
-borg=runif(6,-1,1)
-borg[c(1,3,5)]=1
-first = as.integer(c(1,3,5))
-last=first+1L
-
-b=borg
-
-f=b[2] 
-b[-first] = b[-first]/(f^(a[-first]/a[2]))
-b
-
-test(a,borg,first-1L,last-1L)
-*/
 
 
 

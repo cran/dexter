@@ -2,7 +2,7 @@
 % Please edit documentation in R/plausible_scores.R
 \name{plausible_scores}
 \alias{plausible_scores}
-\title{Generate plausible testscores}
+\title{Generate plausible test scores}
 \usage{
 plausible_scores(dataSrc, parms = NULL, predicate = NULL,
   items = NULL, covariates = NULL, keep.observed = TRUE, nPS = 1,

@@ -13,6 +13,10 @@ ppoint <- function(x) {
     .Call(`_dexter_ppoint`, x)
 }
 
+fill_resp_matrix <- function(person_id, item_id, item_score, out) {
+    invisible(.Call(`_dexter_fill_resp_matrix`, person_id, item_id, item_score, out))
+}
+
 ds_connected_groups <- function(a) {
     .Call(`_dexter_ds_connected_groups`, a)
 }
@@ -103,10 +107,6 @@ NR_booklets <- function(b, a, first, last, scoretab, n_score, nit, max_par_bk, E
 
 calibrate_Bayes_C <- function(a, first, last, ib, bi, nbi, nib, bfirst, blast, bmax, m, sufI, bkscoretab, b_in, fixed_b, from, step, ndraws, prior_eta = 0.5, prior_rho = 0.5, pgw = 0L) {
     .Call(`_dexter_calibrate_Bayes_C`, a, first, last, ib, bi, nbi, nib, bfirst, blast, bmax, m, sufI, bkscoretab, b_in, fixed_b, from, step, ndraws, prior_eta, prior_rho, pgw)
-}
-
-test <- function(a, b, first, last) {
-    .Call(`_dexter_test`, a, b, first, last)
 }
 
 H_im <- function(a, b, c, first, last, sufI, sufC, scoretab, H, Grad, pi_s, diagonal = FALSE) {

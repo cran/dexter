@@ -61,6 +61,18 @@ std::string ppoint(SEXP x)
 }
 
 
+// assumed there are no double responses
+// [[Rcpp::export]]
+void fill_resp_matrix(const IntegerVector& person_id, const IntegerVector& item_id, const IntegerVector& item_score, arma::imat& out)
+{
+	const int n = person_id.length();
+
+#pragma omp parallel for
+	for(int i=0; i<n; i++)
+	{
+		out.at(person_id[i]-1, item_id[i]-1) = item_score[i];
+	}
+}
 
 // [[Rcpp::export]]
 IntegerVector ds_connected_groups(const IntegerMatrix& a)
@@ -485,7 +497,7 @@ List make_booklets_summed_matrix(const IntegerVector& mtx, const int ncol, const
 		if (ret.second) // did not already exist
 		{
 			nbk++;
-			for(int i=0; i<=ncol; i++)
+			for(int i=0; i<ncol; i++)
 				if(bk[i])
 					nitbk++;
 		}
@@ -558,7 +570,7 @@ List make_booklets_matrix(const IntegerVector& mtx, const int ncol, const int nr
 		if (ret.second) // did not already exist
 		{
 			nbk++;
-			for(int i=0; i<=ncol; i++)
+			for(int i=0; i<ncol; i++)
 				if(bk[i])
 					nitbk++;
 		}

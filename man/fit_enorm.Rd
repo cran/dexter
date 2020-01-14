@@ -48,5 +48,5 @@ Psychometrika. 2015; 80(4): 859–879.
 }
 \seealso{
 functions that accept a prms object as input: \code{\link{ability}}, \code{\link{plausible_values}}, 
-\code{\link{plot.prms}}
+\code{\link{plot.prms}}, and \code{\link{plausible_scores}}
 }

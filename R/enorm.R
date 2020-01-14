@@ -35,7 +35,7 @@
 #' Psychometrika. 2015; 80(4): 859–879. 
 #' 
 #' @seealso functions that accept a prms object as input: \code{\link{ability}}, \code{\link{plausible_values}}, 
-#' \code{\link{plot.prms}}
+#' \code{\link{plot.prms}}, and \code{\link{plausible_scores}}
 #'
 fit_enorm = function(dataSrc, predicate = NULL, fixed_params = NULL, method=c("CML", "Bayes"), 
                      nIterations=1000, merge_within_persons=FALSE)
@@ -449,7 +449,7 @@ coef.prms = function(object, hpd = 0.95, ...)
 #' \item{expected_score}{an equal length vector with the expected score at each value of theta}
 #' \item{r_score}{a matrix with length(theta) rows and one column for each item containing simulated scores based on theta. 
 #' To obtain test scores, use rowSums on this matrix}
-#' \item{p_score}{a matrix with length(theta) rows and one column for each possible score containing the probability of 
+#' \item{p_score}{a matrix with length(theta) rows and one column for each possible sumscore containing the probability of 
 #' the score given theta}
 #' }
 #' 
@@ -640,9 +640,9 @@ theta_function = function(parms, items=NULL, booklet=NULL, which.draw=NULL,
   out
 }
 
-print.inf_func = function(x,...) cat('Information function I(theta)\n')
-print.exp_func = function(x,...) cat('Conditional expected score function E(X|theta)\n')
-print.sim_func = function(x,...) cat('(x_i1, ..., x_in) ~ ENORM([theta])\n\tfunction (theta)\n')
-print.pmf_func = function(x,...) cat('Conditional score distribution P(x_+|theta)\n')
+print.inf_func = function(x,...) cat('Information function: I(theta)\n')
+print.exp_func = function(x,...) cat('Conditional expected score function: E(X_i|theta)\n')
+print.sim_func = function(x,...) cat('function to simulate item scores: (x_i1, ..., x_ip) ~ ENORM(theta)\n')
+print.pmf_func = function(x,...) cat('Conditional score distribution function: P(x_+|theta)\n')
 
 

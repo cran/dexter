@@ -19,6 +19,7 @@ verbAggCopy = function(pth = '../verbAggression.db')
 # to do: check for proper number of rows
 
 test_that('profile analysis verb agg',{
+  skip_on_os('solaris')
   db = verbAggCopy()
   
   f = fit_enorm(db)

@@ -343,8 +343,9 @@ coef.rim = function(object, ...)
   I = tibble(item_id = x$inputs$ssI$item_id, sigma = log(x$est$cIM), SE_sigma= x$est$se.sigma, fit_IM=x$est$fit.stats)
   
   inner_join(IS,I,by='item_id') %>% 
-	arrange(.data$item_id, .data$item_score) %>% 
-	df_format()
+	  arrange(.data$item_id, .data$item_score) %>% 
+    mutate(item_id=as.character(.data$item_id)) %>%
+	  df_format()
 }
 
 
