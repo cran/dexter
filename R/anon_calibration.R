@@ -307,6 +307,19 @@ calibrate_CML <- function(scoretab, design, sufI, a, first, last, nIter, fixed_b
       converged=(max(abs(sufI-EsufI))/nn < 1e-04)
       if(is.na(converged))
       {
+        if(tolower(Sys.info())=='sunos')
+        {
+          # we have no idea what goes wrong on solaris so if the error is still there  we give a 
+          # specific eror message to see what happens on cran (desperation)
+          if(any(is.nan(EsufI)))
+            stop("Solaris: E.step returns NaN values")
+          if(anyNA(EsufI))
+            stop("Solaris: E.step returns NA values")
+          if(any(!is.finite(EsufI)))
+            stop("Solaris: E.step returns infinite values")
+          stop("Solaris: converged is NA after e.step")
+        }
+        
         if(use_mean)
           stop('problem cannot be computed')
         # continue with the next iteration using elsym_mean
@@ -360,6 +373,24 @@ calibrate_CML <- function(scoretab, design, sufI, a, first, last, nIter, fixed_b
       
       if(inherits(nb,'try-error') || is.na(converged))
       {
+        if(tolower(Sys.info())=='sunos')
+        {
+          # we have no idea what goes wrong on solaris so if the error is still there  we give a 
+          # specific eror message to see what happens on cran (desperation)
+          if(inherits(nb,'try-error'))
+            stop(nb)
+          
+          if(any(is.nan(EsufI)))
+            stop("Solaris: H.step returns NaN values")
+          if(anyNA(EsufI))
+            stop("Solaris: H.step returns NA values")
+          if(any(!is.finite(EsufI)))
+            stop("Solaris: H.step returns infinite values")
+          stop("Solaris: converged is NA after e.step")
+        }
+        
+        
+        
         if(use_mean)
           stop('problem cannot be computed')
         # continue with the next iteration using elsym_mean

@@ -44,7 +44,7 @@ Each type corresponds to a different parametrization of the model.
 }
 \references{
 Maris, G., Bechger, T.M. and San-Martin, E. (2015) A Gibbs sampler for the (extended) marginal Rasch model. 
-Psychometrika. 2015; 80(4): 859–879.
+Psychometrika. 2015; 80(4): 859-879.
 }
 \seealso{
 functions that accept a prms object as input: \code{\link{ability}}, \code{\link{plausible_values}}, 

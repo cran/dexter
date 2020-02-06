@@ -25,7 +25,6 @@ verbAggCopy = function(pth = '../verbAggression.db')
 
 test_that('rule updates and sanity checks',
 {
-  skip_on_os('solaris')
   db = verbAggCopy()
   
   rules = get_rules(db)
@@ -107,7 +106,6 @@ test_that('rule updates and sanity checks',
 
 test_that('adding person and item properties',
 {
-  skip_on_os('solaris')
   # items
   db = verbAggCopy()
   

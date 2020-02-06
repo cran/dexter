@@ -3,7 +3,6 @@ context('test plausible_values')
 library(dplyr)
 
 test_that('populations work',{
-  skip_on_os('solaris')
   db = open_project('../verbAggression.db')
   
   #artificially create two overlapping booklets

@@ -32,7 +32,7 @@
 #' 
 #' @references 
 #' Maris, G., Bechger, T.M. and San-Martin, E. (2015) A Gibbs sampler for the (extended) marginal Rasch model. 
-#' Psychometrika. 2015; 80(4): 859–879. 
+#' Psychometrika. 2015; 80(4): 859-879. 
 #' 
 #' @seealso functions that accept a prms object as input: \code{\link{ability}}, \code{\link{plausible_values}}, 
 #' \code{\link{plot.prms}}, and \code{\link{plausible_scores}}
@@ -226,14 +226,16 @@ fit_enorm_ = function(dataSrc, qtpredicate = NULL, fixed_params = NULL, method=c
 #' @param dataSrc data source, see details
 #' @param predicate an expression to subset data in dataSrc
 #' @param nbins number of ability groups
-#' @param ci confidence interval for the error bars, between 0 and 1. 0 means no error bars.
+#' @param ci confidence interval for the error bars, between 0 and 1. Use 0 to suppress the error bars.
 #' Default = 0.95 for a 95\% confidence interval
 #' @param ... further arguments to plot
 #' 
 #' @details
 #' The standard plot shows the fit against the sample on which the parameters were fitted. If
 #' dataSrc is provided, the fit is shown against the observed data in dataSrc. This may be useful 
-#' for plotting the fit in different subgroups as a visual test for item level DIF.
+#' for plotting the fit in different subgroups as a visual test for item level DIF. The confidence 
+#' intervals denote the uncertainty about the predicted pvalues within the ability groups for the 
+#' sample size in dataSrc (if not NULL) or the original data on which the model was fit.
 #' 
 #' @method plot prms
 #' 

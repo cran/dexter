@@ -175,13 +175,16 @@ dbExecute_param = function(db, statement, param)
   
   param = as.list(param)
   
+  if(!endsWith(trimws(statement),';'))
+    statement = paste0(statement,';')
+  
   if(is(db, 'PostgreSQLConnection') || is(db, 'PqConnection'))
   {
     vars = paste0(':',names(param))
     names(param) = NULL
     for(i in seq_along(vars))
     {
-      statement = gsub(vars[i], paste0('$',i), statement, fixed=TRUE)
+      statement = gsub(paste0(vars[i],'(?=\\W)'), paste0('$',i), statement, perl=TRUE)
     }
   }  else if(is(db, 'RMySQL'))
   {
