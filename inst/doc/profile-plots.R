@@ -1,4 +1,4 @@
-## ----setup, include=FALSE------------------------------------------------
+## ----setup, include=FALSE-----------------------------------------------------
 knitr::opts_chunk$set(echo = FALSE, dev='CairoPNG')
 library(dexter)
 library(latticeExtra)
@@ -19,7 +19,7 @@ add_booklet(db, verbAggrData, "agg")
 add_item_properties(db, verbAggrProperties)
 profile_plot(db, item_property='mode', covariate='gender', booklet_id=='agg')
 
-## ----frq, echo=FALSE-----------------------------------------------------
+## ----frq, echo=FALSE----------------------------------------------------------
 rownames(fq) = c(0,1,2)
 colnames(fq) = c(0,1,2)
 knitr::kable(fq)
@@ -100,6 +100,6 @@ axis(2, at = 0:2,lty=0)
 profile_plot(db, item_property='mode', covariate='gender', booklet_id=='agg', main='Gender')
 mtext('Do versus Want')
 
-## ---- include=FALSE------------------------------------------------------
+## ---- include=FALSE-----------------------------------------------------------
 close_project(db)
 

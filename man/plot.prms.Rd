@@ -4,8 +4,15 @@
 \alias{plot.prms}
 \title{Plot for the extended nominal Response model}
 \usage{
-\method{plot}{prms}(x, item_id = NULL, dataSrc = NULL,
-  predicate = NULL, nbins = 5, ci = 0.95, ...)
+\method{plot}{prms}(
+  x,
+  item_id = NULL,
+  dataSrc = NULL,
+  predicate = NULL,
+  nbins = 5,
+  ci = 0.95,
+  ...
+)
 }
 \arguments{
 \item{x}{object produced by fit_enorm}

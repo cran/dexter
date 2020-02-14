@@ -1,10 +1,10 @@
-## ----setup, include=FALSE------------------------------------------------
+## ----setup, include=FALSE-----------------------------------------------------
 knitr::opts_chunk$set(echo = TRUE, dev='CairoPNG') 
 
 library(dplyr)
 library(ggplot2)
 
-## ---- echo=FALSE---------------------------------------------------------
+## ---- echo=FALSE--------------------------------------------------------------
 CurlyBraces <- function(x, y, range, pos = 1, direction = 1 ) {
 
     a=c(1,2,3,48,50)    # set flexion point for spline
@@ -64,7 +64,7 @@ ggplot(ts, aes(x = new_test, y = ref_test)) +
   theme(panel.background = element_blank(),
         axis.line = element_line(colour = "black"))
 
-## ---- fig.align='center', fig.height=5, fig.width=5----------------------
+## ---- fig.align='center', fig.height=5, fig.width=5---------------------------
 prob_pass = tp = rep(0,29)
 for (i in seq_along(0:28)){
   prob_pass[i] = sum(ts$ref_test[ts$new_test==i]>=10) / sum(ts$new_test==i)
@@ -73,7 +73,7 @@ for (i in seq_along(0:28)){
 plot(0:28, prob_pass, ylab="Proportion passing the reference test", xlab="New test score", ylim=c(0,1), type = "o", col="red",bty='l')
 lines(0:28, tp, type="o", lty=2, col="blue")
 
-## ---- fig.align='center', fig.height=5, fig.width=5----------------------
+## ---- fig.align='center', fig.height=5, fig.width=5---------------------------
 specificity = sensitivity = rep(0, 29)
 for (i in seq_along(0:28)){
   sensitivity[i] = sum(ts$ref_test[ts$new_test>=i]>=10)/sum(ts$ref_test>=10)
@@ -82,16 +82,16 @@ for (i in seq_along(0:28)){
 plot(0:28, sensitivity, ylab="sensitivity/specificity", xlab="new test score", ylim=c(0,1), type = "o", col="red",bty='l')
 lines(0:28, specificity, col="green", type="o")
 
-## ---- fig.align='center', fig.height=5, fig.width=5----------------------
+## ---- fig.align='center', fig.height=5, fig.width=5---------------------------
 plot(1-specificity, sensitivity, col="green", xlim=c(0,1), ylim=c(0,1), type="l",bty='l')
 text(1-specificity, sensitivity, as.character(0:28), cex=0.7, offset = 0)
 abline(0,1,lty=2, col="grey")
 
-## ---- include=FALSE------------------------------------------------------
+## ---- include=FALSE-----------------------------------------------------------
 close_project(db)
 
 
-## ---- eval=F, include=F--------------------------------------------------
+## ---- eval=F, include=F-------------------------------------------------------
 #  # alternatief voor gesimuleerde data, misschine code laten zien?
 #  nP = 700
 #  nI = 60
@@ -109,7 +109,7 @@ close_project(db)
 #  ref_items = items[1:40]
 #  target_items = items[21:60]
 #  
-#  p = fit_enorm(method='Bayes', nIterations = 5000)
+#  p = fit_enorm(data, method='Bayes', nIterations = 5000)
 #  
 #  pp = probability_to_pass(data, p,
 #                           ref_items = ref_items, pass_fail = 23,
@@ -117,7 +117,7 @@ close_project(db)
 #  
 #  
 
-## ---- echo=FALSE, message=FALSE, results='hide'--------------------------
+## ---- echo=FALSE, message=FALSE, results='hide'-------------------------------
 nP = 700
 nI = 60
 theta = c(rnorm(500, 0,2), rnorm(nP-500, 0.5,2))
@@ -128,7 +128,7 @@ names(x1) = paste0('i', 1:40)
 x2 = as.data.frame(x[501:nP, 21:60])
 names(x2) = paste0('i', 21:60)
 
-## ---- echo=FALSE, message=FALSE, results='hide'--------------------------
+## ---- echo=FALSE, message=FALSE, results='hide'-------------------------------
 rules = data.frame(item_id=rep(paste0('i',1:60), each=2), response=rep(c(0,1),60), item_score=rep(c(0,1),60))
 db_sm = start_new_project(rules, ":memory:")
 add_booklet(db_sm, x=x1, "bk1")
@@ -150,11 +150,11 @@ plot(ou_e, what="equating")
 ## ---- echo=TRUE, fig.align='center', results='hide', fig.height=4, fig.width=4----
 plot(ou_e, what='sens/spec')
 
-## ---- echo=FALSE, message=FALSE------------------------------------------
+## ---- echo=FALSE, message=FALSE-----------------------------------------------
 close_project(db_sm)
 
 
-## ---- eval = FALSE-------------------------------------------------------
+## ---- eval = FALSE------------------------------------------------------------
 #    p_pass_given_s = out$probability_to_pass
 #    ps = ou_e$pnew
 #    tp = rev(cumsum(rev(p_pass_given_s*ps))) / rev(cumsum(rev(ps)))

@@ -4,8 +4,15 @@
 \alias{distractor_plot}
 \title{Distractor plot}
 \usage{
-distractor_plot(dataSrc, item_id, predicate = NULL, legend = TRUE,
-  curtains = 10, col = NULL, ...)
+distractor_plot(
+  dataSrc,
+  item_id,
+  predicate = NULL,
+  legend = TRUE,
+  curtains = 10,
+  col = NULL,
+  ...
+)
 }
 \arguments{
 \item{dataSrc}{a connection to a dexter database or a data.frame with columns: person_id, item_id, response, item_score

@@ -1,4 +1,4 @@
-## ----setup, include=FALSE------------------------------------------------
+## ----setup, include=FALSE-----------------------------------------------------
 library(knitr)
 opts_chunk$set(echo = TRUE, dev='CairoPNG')
 
@@ -17,7 +17,7 @@ library(tidyr)
 
 select = dplyr::select # fixes a weird bug
 
-## ------------------------------------------------------------------------
+## -----------------------------------------------------------------------------
 sim_PV = function(theta, delta) {
   nit = length(delta)
   sim_func = r_score( tibble(item_id=1:nit, item_score=1, delta=delta))
@@ -35,12 +35,12 @@ sim_PV = function(theta, delta) {
   lines(ecdf(theta-mean(theta)))
 }
 
-## ----fig.align='center', fig.height=4,fig.width=4------------------------
+## ----fig.align='center', fig.height=4,fig.width=4-----------------------------
 theta = rnorm(300)
 delta = runif(50, -2, 1)
 sim_PV(theta, delta)
 
-## ----fig.align='center',  fig.width=7------------------------------------
+## ----fig.align='center',  fig.width=7-----------------------------------------
 grp = sample(2, 300, replace = TRUE, prob = c(.5,.5))
 theta = rnorm(300, mean = c(-2,2)[grp], sd = c(1,1)[grp])
 plot(density(theta),bty='l',main='')
@@ -49,7 +49,7 @@ sim_PV(theta, delta[1:10])
 sim_PV(theta, delta[1:20])
 sim_PV(theta, delta)
 
-## ------------------------------------------------------------------------
+## -----------------------------------------------------------------------------
 sim_PV2 = function(theta, delta) {
   nit = length(delta)
   sim_func = r_score( tibble(item_id=1:nit, item_score=1, delta=delta))
@@ -67,12 +67,12 @@ sim_PV2 = function(theta, delta) {
   lines(ecdf(theta-mean(theta)))
 }
 
-## ----make_pv2, fig.align='center',fig.width=7, par=list(mfrow=c(1,3))----
+## ----make_pv2, fig.align='center',fig.width=7, par=list(mfrow=c(1,3))---------
 sim_PV2(theta, delta[1:10])
 sim_PV2(theta, delta[1:20])
 sim_PV2(theta, delta)
 
-## ----make_pv3, fig.align='center',fig.width=7,par=list(mfrow=c(1,3))-----
+## ----make_pv3, fig.align='center',fig.width=7,par=list(mfrow=c(1,3))----------
 
 sim_PV3 = function(theta, delta, group) {
   nit = length(delta)

@@ -1,3 +1,7 @@
+# dexter 1.05
+
+* Almost sure this release finally fixes the solaris issues
+
 # dexter 1.04
 
 * added systemrequirements to description in the hope that it will solve solaris issues

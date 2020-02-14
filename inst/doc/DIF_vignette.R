@@ -1,7 +1,7 @@
-## ----setup, include=FALSE------------------------------------------------
+## ----setup, include=FALSE-----------------------------------------------------
 knitr::opts_chunk$set(echo = TRUE, fig.width=6, fig.height=5, dev='CairoPNG')
 
-## ----get_data, results='hide', message=FALSE-----------------------------
+## ----get_data, results='hide', message=FALSE----------------------------------
 library(dexter)
 library(dplyr)
 
@@ -9,7 +9,7 @@ db = start_new_project(verbAggrRules, ":memory:", person_properties=list(gender=
 add_booklet(db, verbAggrData, "data")
 add_item_properties(db, verbAggrProperties)
 
-## ----dif-----------------------------------------------------------------
+## ----dif----------------------------------------------------------------------
 dif_gender = DIF(db, "gender")
 dif_gender
 
@@ -28,15 +28,15 @@ text(cf$beta,0,paste(cf$item_id, cf$item_score),cex=0.6,adj=1,srt=90,pos = 3, xp
 text(-1.3,0.8,"Males", pos=2, xpd=NA)
 text(-1.3,0,"Females", pos=2, xpd=NA)
 
-## ----plotdif,fig.align='center'------------------------------------------
+## ----plotdif,fig.align='center'-----------------------------------------------
 plot(dif_gender)
 
-## ----sorting, fig.align='center'-----------------------------------------
+## ----sorting, fig.align='center'----------------------------------------------
 items = get_items(db) %>%
   arrange(mode, item_id)
   
 plot(dif_gender, items=items$item_id)
 
-## ---- echo=FALSE, results='hide'-----------------------------------------
+## ---- echo=FALSE, results='hide'----------------------------------------------
 close_project(db)
 

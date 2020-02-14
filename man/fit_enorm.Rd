@@ -4,9 +4,14 @@
 \alias{fit_enorm}
 \title{Fit the extended nominal response model}
 \usage{
-fit_enorm(dataSrc, predicate = NULL, fixed_params = NULL,
-  method = c("CML", "Bayes"), nIterations = 1000,
-  merge_within_persons = FALSE)
+fit_enorm(
+  dataSrc,
+  predicate = NULL,
+  fixed_params = NULL,
+  method = c("CML", "Bayes"),
+  nIterations = 1000,
+  merge_within_persons = FALSE
+)
 }
 \arguments{
 \item{dataSrc}{a connection to a dexter database, a matrix, or a data.frame with columns: person_id, item_id, item_score}
