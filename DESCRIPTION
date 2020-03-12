@@ -1,7 +1,7 @@
 Package: dexter
 Type: Package
 Title: Data Management and Analysis of Tests
-Version: 1.0.5
+Version: 1.0.6
 Author: Gunter Maris, Timo Bechger, Jesse Koops, Ivailo Partchev
 Maintainer: Jesse Koops <jesse.koops@cito.nl>
 Description: A system for the management, assessment, and psychometric analysis of data from educational and psychological tests. 
@@ -19,6 +19,6 @@ RoxygenNote: 7.0.2
 Suggests: knitr, rmarkdown, latticeExtra, testthat, ggplot2, Cairo
 VignetteBuilder: knitr
 NeedsCompilation: yes
-Packaged: 2020-02-14 12:51:17 UTC; jessek
+Packaged: 2020-03-12 11:31:02 UTC; jessek
 Repository: CRAN
-Date/Publication: 2020-02-14 15:30:08 UTC
+Date/Publication: 2020-03-12 12:40:17 UTC

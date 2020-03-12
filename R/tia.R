@@ -38,9 +38,10 @@ tia_tables = function(dataSrc, predicate = NULL, type=c('raw','averaged','compar
     ti$item_id = as.character(ti$item_id)
     ti = inner_join(
       select(ti,-.data$maxScore),
-      dbGetQuery(dataSrc, 'SELECT item_id, MAX(item_score) AS maxScore 
+      dbGetQuery(dataSrc, 'SELECT item_id, MAX(item_score) AS max_score 
                           FROM dxscoring_rules GROUP BY item_id;'),
-      by='item_id')
+      by='item_id') %>%
+      rename(maxScore = .data$max_score)
   } 
   
   ti = mutate(ti, pvalue=coalesce(.data$meanScore/.data$maxScore, 0))

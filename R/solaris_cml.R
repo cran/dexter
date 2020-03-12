@@ -121,6 +121,8 @@ est_lambda_sol <- function(b, a, first, last, scoretab)
   ifelse(scoretab>0, scoretab/(elsym_sol(b,a,first,last)*sum(scoretab)), NA) 
 }  
 
+#calibrate_Bayes(scoretab, design, sufI, a, first, last,  nIter, fixed_b=fixed_b)
+
 # to do: aanroep aanpassen, list of booklets wordt niet meer gebruikt
 # calibrate_CML_sol = function(booklet, sufI, a, first, last, nIter, fixed_b=NULL) {
 calibrate_CML_sol = function(scoretab, design, sufI, a, first, last, nIter, fixed_b=NULL)
@@ -152,6 +154,10 @@ calibrate_CML_sol = function(scoretab, design, sufI, a, first, last, nIter, fixe
       }
       b = b*sufI/EsufI
       converged=(max(abs(sufI-EsufI))/nn<1e-04)
+      if(is.na(converged))
+      {
+        return(calibrate_Bayes(scoretab, design, sufI, a, first, last,  nIter, fixed_b=fixed_b))
+      }
       setTxtProgressBar(pb, value=iter)
     }
     ie_iter=iter
@@ -195,9 +201,16 @@ calibrate_CML_sol = function(scoretab, design, sufI, a, first, last, nIter, fixe
       H[,ref_cat]=0
       H[ref_cat,ref_cat]=1
       EsufI[ref_cat]=sufI[ref_cat]
-      b = b*exp(solve(H*scale,sufI-EsufI))
-      
+
+      b = try(b*exp(solve(H*scale,sufI-EsufI)))
       converged=(max(abs(EsufI-sufI))/nn<1e-10)
+      
+      if(inherits(b,'try-error') || is.na(converged))
+      {
+        return(calibrate_Bayes(scoretab, design, sufI, a, first, last,  nIter, fixed_b=fixed_b))
+      }
+      
+      
       setTxtProgressBar(pb, value=iter)
       if (nr_iter==2) scale=1
     }
@@ -228,6 +241,10 @@ calibrate_CML_sol = function(scoretab, design, sufI, a, first, last, nIter, fixe
       }
       b[update_set] = b[update_set]*sufI[update_set]/EsufI[update_set]
       converged=(max(abs(sufI[update_set]-EsufI[update_set]))/nn<1e-04)
+      if(is.na(converged))
+      {
+        return(calibrate_Bayes(scoretab, design, sufI, a, first, last,  nIter, fixed_b=fixed_b))
+      }
       setTxtProgressBar(pb, value=iter)
     }
     ie_iter=iter
@@ -264,8 +281,15 @@ calibrate_CML_sol = function(scoretab, design, sufI, a, first, last, nIter, fixe
       H[,fixed_set]=0
       diag(H)[fixed_set]=1
       EsufI[fixed_set]=sufI[fixed_set]
-      b = b*exp(solve(H*scale,sufI-EsufI))
+      b = try(b*exp(solve(H*scale,sufI-EsufI)))
       converged=(max(abs(EsufI[update_set]-sufI[update_set]))/nn<1e-10)
+      
+      if(inherits(b,'try-error') || is.na(converged))
+      {
+        return(calibrate_Bayes(scoretab, design, sufI, a, first, last,  nIter, fixed_b=fixed_b))
+      }
+      
+      
       setTxtProgressBar(pb, value=iter)
       scale=1
     }

@@ -488,7 +488,7 @@ calibrate_CML <- function(scoretab, design, sufI, a, first, last, nIter, fixed_b
 # lambda' s using the renormalized b to solve this.
 calibrate_Bayes = function(scoretab, design, sufI, a, first, last,  nIter, fixed_b=NULL, progress = show_progress())
 {
-  if(Gibbs.settings$start_b=='random')
+  if(Gibbs.settings$start_b=='random' || tolower(Sys.info()['sysname'])=='sunos')
   {
     b = exp(runif(length(a), -1, 1))
     b[first] = 1

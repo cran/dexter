@@ -40,6 +40,9 @@
 fit_enorm = function(dataSrc, predicate = NULL, fixed_params = NULL, method=c("CML", "Bayes"), 
                      nIterations=1000, merge_within_persons=FALSE)
 {
+  dplyr_prog = options(dplyr.show_progress=FALSE)
+  on.exit(options(dplyr.show_progress=dplyr_prog))
+  
   method = match.arg(method)
   check_dataSrc(dataSrc)
   check_num(nIterations, 'integer', .length=1, .min=1)
@@ -188,11 +191,18 @@ fit_enorm_ = function(dataSrc, qtpredicate = NULL, fixed_params = NULL, method=c
     result = calibrate_CML(scoretab=scoretab, design=design, sufI=ssIS$sufI, a=ssIS$item_score, 
                                first=ssI$first, last=ssI$last, nIter=nIterations,
                                fixed_b=fixed_b)
+
   } else 
   {
     result = calibrate_Bayes(scoretab=scoretab, design=design, sufI=ssIS$sufI, a=ssIS$item_score,
                               first=ssI$first, last=ssI$last, nIter=nIterations, fixed_b=fixed_b)
   }
+  if(tolower(Sys.info()['sysname'])=='sunos' && is.matrix(result$b))
+  {
+    method='Bayes'
+    message('Hessian matrix could not be inverted due to lack of computable precision. Bayesian method was used.')
+  }
+  
   
   mle = design %>% 
     group_by(.data$booklet_id) %>%
