@@ -1,4 +1,8 @@
-# dexter 1.6
+# dexter 1.07
+
+* adapting to an update in tibble
+
+# dexter 1.06
 
 * specific workarounds for (cran) solaris
 

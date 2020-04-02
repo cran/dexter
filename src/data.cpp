@@ -364,7 +364,7 @@ List make_booklets_summed_tmpl(IntegerVector& person_id, IntegerVector& booklet_
 	booklet_id[np] = ret.first->second;
 	item_score[np] = ss;
 	person_id[np] = person_id[nr-1];
-	item_id[np] = nr-1;
+	item_id[np] = nr;
 	
 	if (ret.second)
 	{
@@ -404,6 +404,9 @@ List make_booklets_summed_tmpl(IntegerVector& person_id, IntegerVector& booklet_
 	
 	ditem.attr("levels") = as<CharacterVector>(item_id.attr("levels"));
 	ditem.attr("class") = "factor";	
+	
+	item_id.attr("levels") = R_NilValue;
+	item_id.attr("class") = "integer";
 
 	if(Rf_isFactor(booklet_id))
 	{

@@ -239,7 +239,8 @@ fit_enorm_ = function(dataSrc, qtpredicate = NULL, fixed_params = NULL, method=c
 #' @param ci confidence interval for the error bars, between 0 and 1. Use 0 to suppress the error bars.
 #' Default = 0.95 for a 95\% confidence interval
 #' @param ... further arguments to plot
-#' 
+#' @return 
+#' Silently, a data.frame with observed an expected values.
 #' @details
 #' The standard plot shows the fit against the sample on which the parameters were fitted. If
 #' dataSrc is provided, the fit is shown against the observed data in dataSrc. This may be useful 
