@@ -1,3 +1,10 @@
+# dexter 1.08
+
+* added extra argument to `coef.prms` to retrieve vraiance-covariance matrix or posterior of
+item parameters
+* bugfix: x-axis scaled incorrectly when plotting parameters for Bayesian calibration
+* update examples for updated cran check in 3.4
+
 # dexter 1.07
 
 * adapting to an update in tibble

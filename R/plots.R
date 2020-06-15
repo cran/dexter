@@ -75,7 +75,7 @@ draw_curtains = function(qnt)
 #' @param legend logical, whether to include the legend. default is TRUE
 #' @param curtains 100*the tail probability of the sum scores to be shaded. Default is 10.
 #' Set to 0 to have no curtains shown at all.
-#' @param adjust factor to adjust the smoothing bandwith respective to the default value
+#' @param adjust factor to adjust the smoothing bandwidth respective to the default value
 #' @param col vector of colors to use for plotting
 #' @param ... further arguments to plot.
 #' @return 

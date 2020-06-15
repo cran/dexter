@@ -50,7 +50,8 @@ utils::globalVariables(c("."))
 #' @examples
 #'\donttest{
 #' head(verbAggrRules)
-#' db = start_new_project(verbAggrRules, "verbAggression.db", 
+#' db_name = tempfile(fileext='.db')
+#' db = start_new_project(verbAggrRules, db_name, 
 #'                        person_properties = list(gender = "unknown"))
 #' }
 #' 
@@ -248,13 +249,13 @@ keys_to_rules = function(keys, include_NA_rule = FALSE)
 #' The rules should contain all rules that you want to change or add. This means that in case of a key error
 #' in a single multiple choice question, you typically have to change two rules.
 #' @examples 
-#'\donttest{
+#'\dontrun{\donttest{
 #' # given that in your dexter project there is an mc item with id 'itm_01', 
 #' # which currently has key 'A' but you want to change it to 'C'.
 #' 
 #' new_rules = data.frame(item_id='itm_01', response=c('A','C'), item_score=c(0,1))
 #' touch_rules(db, new_rules)
-#' }
+#' }}
 #' 
 touch_rules = function(db, rules)
 {
@@ -508,6 +509,12 @@ add_booklet = function(db, x, booklet_id, auto_add_unknown_rules = FALSE) {
 add_response_data = function(db, data, auto_add_unknown_rules = FALSE, missing_value = 'NA')
 {
   colnames(data) = tolower(colnames(data))
+  if('item_score' %in% colnames(data) && ( ! 'response' %in% colnames(data)) && is_scored_db(db))
+  {
+    message('column `response` not found in data, using `item_score` instead')
+    data = rename(data, response = 'item_score')
+  }
+  
   check_df(data, c('item_id', 'person_id', 'response','booklet_id'))
 
   data = ungroup(data)
@@ -658,14 +665,14 @@ add_response_data = function(db, data, auto_add_unknown_rules = FALSE, missing_v
 #'  possible uses of item_properties
 #'
 #' @examples 
-#' \dontrun{
+#' \dontrun{\donttest{
 #' db = start_new_project(verbAggrRules, "verbAggression.db")
 #' head(verbAggrProperties)
 #' add_item_properties(db, verbAggrProperties)
 #' get_items(db) 
 #' 
 #' close_project(db)
-#' }
+#' }}
 #'
 add_item_properties = function(db, item_properties=NULL, default_values=NULL) {
   
