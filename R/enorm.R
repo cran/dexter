@@ -15,9 +15,9 @@
 #' a data.frame with parameters, see details.
 #' @param method If CML, the estimation method will be Conditional Maximum Likelihood;
 #' otherwise, a Gibbs sampler will be used to produce a sample from the posterior
-#' @param nIterations Number of Gibbs samples when estimation method is Bayes. The maximum 
-#' number of iterations when using CML.
+#' @param nDraws Number of Gibbs samples when estimation method is Bayes. 
 #' @param merge_within_persons whether to merge different booklets administered to the same person, enabling linking over persons as well as booklets.
+#' @param nIterations deprecated
 #' @return An object of type \code{prms}. The prms object can be cast to a data.frame of item parameters 
 #' using function `coef` or used directly as input for other Dexter functions.
 #' @details
@@ -32,38 +32,43 @@
 #' 
 #' @references 
 #' Maris, G., Bechger, T.M. and San-Martin, E. (2015) A Gibbs sampler for the (extended) marginal Rasch model. 
-#' Psychometrika. 2015; 80(4): 859-879. 
+#' Psychometrika. 80(4), 859-879. 
+#' 
+#' Koops, J. and Bechger, T.M. and Maris, G. (in press); Bayesian inference for multistage and other 
+#' incomplete designs. In Research for Practical Issues and Solutions in Computerized Multistage Testing.
+#' Routledge, London. 
 #' 
 #' @seealso functions that accept a prms object as input: \code{\link{ability}}, \code{\link{plausible_values}}, 
 #' \code{\link{plot.prms}}, and \code{\link{plausible_scores}}
 #'
 fit_enorm = function(dataSrc, predicate = NULL, fixed_params = NULL, method=c("CML", "Bayes"), 
-                     nIterations=1000, merge_within_persons=FALSE)
+                     nDraws=1000, merge_within_persons=FALSE, nIterations=NULL)
 {
+  if(!is.null(nIterations))
+    stop("Argument nIterations was removed in a recent version of dexter. Use nDraws instead.")
+  
   dplyr_prog = options(dplyr.show_progress=FALSE)
   on.exit(options(dplyr.show_progress=dplyr_prog))
   
   method = match.arg(method)
   check_dataSrc(dataSrc)
-  check_num(nIterations, 'integer', .length=1, .min=1)
+  check_num(nDraws, 'integer', .length=1, .min=1)
   qtpredicate = eval(substitute(quote(predicate)))
   env = caller_env()
  
   
   
   fit_enorm_(dataSrc, qtpredicate = qtpredicate, fixed_params = fixed_params, 
-             method=method, nIterations=nIterations, env=env, merge_within_persons=merge_within_persons)
+             method=method, nDraws=nDraws, env=env, merge_within_persons=merge_within_persons)
 }
 
 
 fit_enorm_ = function(dataSrc, qtpredicate = NULL, fixed_params = NULL, method=c("CML", "Bayes"), 
-                      nIterations=500, env=NULL, merge_within_persons=FALSE,progress = show_progress()) 
+                      nDraws=1000, env=NULL, merge_within_persons=FALSE,progress = show_progress()) 
 {
   method = match.arg(method)
   if(is.null(env)) env = caller_env()
-  
-  
-  
+
   if(progress) pg_start()
   if(progress && is_db(dataSrc))
     cat(' retrieving data...')
@@ -74,70 +79,16 @@ fit_enorm_ = function(dataSrc, qtpredicate = NULL, fixed_params = NULL, method=c
   if(progress && is_db(dataSrc))
     cat('\r                          \r|')
   
-  design = respData$design
-  
-  # to~do: I think we need tests with at least three items, fischer criterium
-  if(nrow(design) == 1) 
-    stop('There are responses to only one item in your selection, this cannot be calibrated.') 
-  
-  if(!is_connected(design))
-    stop('Your design is not connected')  
 
   ss = get_sufStats_nrm(respData)
+
+  ssI = ss$ssI
   ssIS = ss$ssIS
+  design = ss$design
   plt = ss$plt
-  
-  # bug in dplyr, min/max of integer in group_by becomes double
-  ssI  = ssIS %>% 
-    mutate(rn = row_number()) %>%
-    group_by(.data$item_id) %>%
-    summarise(first = as.integer(min(.data$rn)),last = as.integer(max(.data$rn))) %>%
-    ungroup() %>%
-    arrange(.data$item_id)
-  
-  if(any(ssI$first == ssI$last)) 
-  {
-  	message('Items without score variation:')
-  	print(as.character(ssI$item_id[ssI$first == ssI$last]))
-  	stop('One or more items are without score variation')
-  }
-  if(any(ssIS$item_score[ssI$first] !=0))
-  {
-    # to do: check in interaction model
-    message('Items without a zero score category')
-    print(as.character(ssI$item_id[ssIS$item_score[ssI$first] !=0]))
-    stop('Minimum score for an item must be zero')
-  }
+  scoretab = ss$scoretab
   
   
-  design = design %>%
-    inner_join(ssI,by='item_id') %>%
-    arrange(.data$booklet_id, .data$first)
-  
-  itm_max = ssIS %>% 
-    group_by(.data$item_id) %>% 
-    summarise(maxScore = as.integer(max(.data$item_score))) %>% 
-    ungroup()
-  
-  # max booklet scores
-  maxScores = itm_max %>%
-    inner_join(design, by='item_id') %>%
-    group_by(.data$booklet_id) %>%
-    summarise(maxTotScore = sum(.data$maxScore))
-  
-  # booklets 0:maxscore
-  all_scores = maxScores %>% 
-    group_by(.data$booklet_id) %>%
-    do({tibble(booklet_score=0:.$maxTotScore)}) %>%
-    ungroup()
-  
-  scoretab = plt %>%
-    distinct(.data$booklet_id, .data$booklet_score,.data$N) %>%
-    right_join(all_scores, by=c('booklet_id','booklet_score')) %>%
-    mutate(N=coalesce(.data$N, 0L)) %>%
-    arrange(.data$booklet_id, .data$booklet_score)
-
-
   fixed_b = NULL
   has_fixed_parms = !is.null(fixed_params)
 
@@ -189,28 +140,29 @@ fit_enorm_ = function(dataSrc, qtpredicate = NULL, fixed_params = NULL, method=c
   
   if (method=="CML"){
     result = calibrate_CML(scoretab=scoretab, design=design, sufI=ssIS$sufI, a=ssIS$item_score, 
-                               first=ssI$first, last=ssI$last, nIter=nIterations,
+                               first=ssI$first, last=ssI$last, 
                                fixed_b=fixed_b)
 
   } else 
   {
+    
+    
     result = calibrate_Bayes(scoretab=scoretab, design=design, sufI=ssIS$sufI, a=ssIS$item_score,
-                              first=ssI$first, last=ssI$last, nIter=nIterations, fixed_b=fixed_b)
+                              first=ssI$first, last=ssI$last, nIter=nDraws, fixed_b=fixed_b)
+    
+    
   }
-  if(tolower(Sys.info()['sysname'])=='sunos' && is.matrix(result$b))
+  if(method=='CML' && tolower(Sys.info()['sysname'])=='sunos' && is.matrix(result$b))
   {
     method='Bayes'
     message('Hessian matrix could not be inverted due to lack of computable precision. Bayesian method was used.')
   }
   
-  b=result$b
-  if(is.matrix(b))
-    b=colMeans(b)
-  
   mle = design %>% 
     group_by(.data$booklet_id) %>%
     do({
-      est = theta_MLE(b, a=ssIS$item_score, .$first, .$last, se=FALSE)
+      est = theta_MLE(if.else(is.matrix(result$b),colMeans(result$b), result$b), 
+                      a=ssIS$item_score, .$first, .$last, se=FALSE)
       theta = est$theta[2:(length(est$theta)-1)]
       tibble(booklet_score=1:length(theta), theta = theta)
     }) %>%
@@ -243,7 +195,7 @@ fit_enorm_ = function(dataSrc, qtpredicate = NULL, fixed_params = NULL, method=c
 #' Default = 0.95 for a 95\% confidence interval
 #' @param ... further arguments to plot
 #' @return 
-#' Silently, a data.frame with observed an expected values.
+#' Silently, a data.frame with observed and expected values possibly useful to create a numerical fit measure.
 #' @details
 #' The standard plot shows the fit against the sample on which the parameters were fitted. If
 #' dataSrc is provided, the fit is shown against the observed data in dataSrc. This may be useful 
@@ -307,17 +259,14 @@ plot.prms = function(x, item_id=NULL, dataSrc=NULL, predicate=NULL, nbins=5, ci 
     x$inputs$plt = get_sufStats_nrm(respData)$plt
   }
   
-  #old dexterMST
-  if(is.null(x$abl_tables$mle))
-  {
-    x$abl_tables$mle = ability_tables(x,method='MLE', standard_errors=FALSE) %>%
-      filter(is.finite(.data$theta))
-  }
+
   #many plots
   if(length(item_id) > 1)
   {
-    return(invisible(
-      lapply(item_id, function(itm) do.call(plot, append(list(x=x, item_id=itm, nbins=nbins, ci=ci), dots)))))
+    out = lapply(item_id, function(itm) do.call(plot, append(list(x=x, item_id=itm, nbins=nbins, ci=ci), dots)))
+    names(out) = as.character(item_id)
+    
+    return(invisible(out))
   }
   # for dplyr
   item_id_ = as.character(item_id)
@@ -372,9 +321,10 @@ plot.prms = function(x, item_id=NULL, dataSrc=NULL, predicate=NULL, nbins=5, ci 
              conf_max = max_score * cmax(.data$expected_score/max_score, .data$n)) %>%
       mutate(outlier = .data$avg_score < .data$conf_min | .data$avg_score > .data$conf_max)
     
-    arrows(plt$gr_theta, plt$conf_min, 
-           plt$gr_theta, plt$conf_max, 
-           length=0.05, angle=90, code=3, col='grey80')
+    suppressWarnings({
+      arrows(plt$gr_theta, plt$conf_min, 
+             plt$gr_theta, plt$conf_max, 
+             length=0.05, angle=90, code=3, col='grey80')})
   } 
   
   lines(plt$gr_theta,plt$avg_score)  

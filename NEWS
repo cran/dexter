@@ -1,6 +1,12 @@
+# dexter 1.1.1
+
+* profiles/profile_tables can now take a data.frame of item parameters
+* bugfix: mistakenly renormalized parameters when using a data.frame of polytomous item parameters 
+
+
 # dexter 1.08
 
-* added extra argument to `coef.prms` to retrieve vraiance-covariance matrix or posterior of
+* added extra argument to `coef.prms` to retrieve variance-covariance matrix or posterior of
 item parameters
 * bugfix: x-axis scaled incorrectly when plotting parameters for Bayesian calibration
 * update examples for updated cran check in 3.4

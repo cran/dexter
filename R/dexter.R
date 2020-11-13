@@ -369,7 +369,7 @@ touch_rules = function(db, rules)
 #' Any column whose name has an exact match in the scoring rules inputted with
 #' function \code{start_new_project} will be treated as an item; any column whose name has an 
 #' exact match in the person_properties will be treated as a person property. If a name matches both
-#' a person_property and an item, the item takes precedence. Columns other than items, person properties 
+#' a person_property and an item_id, the item takes precedence. Columns other than items, person properties 
 #' and person_id will be ignored.
 #' 
 #' 
@@ -387,7 +387,7 @@ touch_rules = function(db, rules)
 #' is not defined in your rules and \code{auto_add_unknown_rules} is set to FALSE (the default). Please also note
 #' that the booklet_design for any specific booklet is derived from the distinct combination of booklet_id and item_id
 #' in \code{data} the first time that booklet is encountered. If subsequent calls to \code{add_response_data} 
-#' contain data with more/different items for this same booklet, this will cause an error. 
+#' contain data with more or different items for this same booklet, this will cause an error. 
 #' 
 #' 
 #' Note that responses are always treated as strings (in both functions), and \code{NA}
@@ -1037,7 +1037,7 @@ design_info = function(dataSrc, predicate = NULL)
   qtpredicate = eval(substitute(quote(predicate)))
   env = caller_env()
 
-  check_dataSrc(dataSrc)
+  #check_dataSrc(dataSrc) # removed, prevents design being inputted
 
   # parms objects
   if(inherits(dataSrc,'list') && !is.null(dataSrc$inputs$design))
@@ -1052,7 +1052,7 @@ design_info = function(dataSrc, predicate = NULL)
     out$design = dataSrc %>%
       distinct(.data$booklet_id, .data$item_id, .keep_all=TRUE)
     
-    out$design = out$design[,intersect(colnames(out$design, c('booklet_id','item_id','item_position')))]
+    out$design = out$design[,intersect(colnames(out$design), c('booklet_id','item_id','item_position'))]
     out$design$n_persons = NA_integer_
   } else
   {

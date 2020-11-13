@@ -109,7 +109,7 @@ close_project(db)
 #  ref_items = items[1:40]
 #  target_items = items[21:60]
 #  
-#  p = fit_enorm(data, method='Bayes', nIterations = 5000)
+#  p = fit_enorm(data, method='Bayes', nDraws = 5000)
 #  
 #  pp = probability_to_pass(data, p,
 #                           ref_items = ref_items, pass_fail = 23,
@@ -139,7 +139,7 @@ pass_fail = 23
 target_items = colnames(x2)
 
 ## ---- message=FALSE, fig.align='center', results='hide',fig.height=4,fig.width=4----
-p_sm = fit_enorm(db_sm, method='Bayes', nIterations = 5000)
+p_sm = fit_enorm(db_sm, method='Bayes', nDraws = 5000)
 
 ou_e = probability_to_pass(db_sm, p_sm,
                            ref_items = ref_items, 

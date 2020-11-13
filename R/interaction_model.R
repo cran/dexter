@@ -143,7 +143,7 @@ fit_domains = function(dataSrc, item_property, predicate = NULL)
   qtpredicate = eval(substitute(quote(predicate)))
   env = caller_env()
 
-  respData = get_resp_data(dataSrc, qtpredicate, extra_columns = item_property, env = env, retain_person_id=FALSE) %>%
+  get_resp_data(dataSrc, qtpredicate, extra_columns = item_property, env = env, retain_person_id=FALSE) %>%
 	  intersection() %>%
     polytomize(item_property, protect_x = !is_db(dataSrc)) %>%
     fit_inter_()
@@ -362,16 +362,21 @@ coef.rim = function(object, ...)
 #' 
 r_score_IM = function(m, scores)
 {
-
+  if(!inherits(m,'rim'))
+    stop('input `m` must be of class "rim"')
+  
+  if(any(scores>maxs))
+    stop('scores may not be larger than the maximum score on the test')
+  
+  if(any(scores<0))
+    stop('all scores must be positive')
+    
   first = m$inputs$ssI$first
   last = m$inputs$ssI$last
   a = m$inputs$ssIS$item_score
   bIM = m$est$bIM
   cIM = m$est$cIM
   maxs = sum(a[last])
-
-  if(any(scores>maxs))
-    stop('scores may not be larger than the maximum score on the test')
   
   scoretab = score_tab_single(scores, maxs)
   

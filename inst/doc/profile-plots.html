@@ -12,10 +12,35 @@
 
 <meta name="author" content="Timo Bechger and Ivailo Partchev" />
 
-<meta name="date" content="2020-06-15" />
+<meta name="date" content="2020-11-13" />
 
 <title>How Members of Different Groups Obtain the Same Test Score: Profile Plots in Dexter</title>
 
+<script>// Hide empty <a> tag within highlighted CodeBlock for screen reader accessibility (see https://github.com/jgm/pandoc/issues/6352#issuecomment-626106786) -->
+// v0.0.1
+// Written by JooYoung Seo (jooyoung@psu.edu) and Atsushi Yasumoto on June 1st, 2020.
+
+document.addEventListener('DOMContentLoaded', function() {
+  const codeList = document.getElementsByClassName("sourceCode");
+  for (var i = 0; i < codeList.length; i++) {
+    var linkList = codeList[i].getElementsByTagName('a');
+    for (var j = 0; j < linkList.length; j++) {
+      if (linkList[j].innerHTML === "") {
+        linkList[j].setAttribute('aria-hidden', 'true');
+      }
+    }
+  }
+});
+</script>
+
+<style type="text/css">
+  code{white-space: pre-wrap;}
+  span.smallcaps{font-variant: small-caps;}
+  span.underline{text-decoration: underline;}
+  div.column{display: inline-block; vertical-align: top; width: 50%;}
+  div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+  ul.task-list{list-style: none;}
+      </style>
 
 
 
@@ -215,7 +240,7 @@ code > span.er { color: #a61717; background-color: #e3d2d2; }
 
 <h1 class="title toc-ignore">How Members of Different Groups Obtain the Same Test Score: Profile Plots in Dexter</h1>
 <h4 class="author">Timo Bechger and Ivailo Partchev</h4>
-<h4 class="date">2020-06-15</h4>
+<h4 class="date">2020-11-13</h4>
 
 
 
@@ -240,7 +265,7 @@ div.crop img{
 <table>
 <thead>
 <tr class="header">
-<th></th>
+<th align="left"></th>
 <th align="right">0</th>
 <th align="right">1</th>
 <th align="right">2</th>
@@ -248,19 +273,19 @@ div.crop img{
 </thead>
 <tbody>
 <tr class="odd">
-<td>0</td>
+<td align="left">0</td>
 <td align="right">10</td>
 <td align="right">20</td>
 <td align="right">15</td>
 </tr>
 <tr class="even">
-<td>1</td>
+<td align="left">1</td>
 <td align="right">12</td>
 <td align="right">40</td>
 <td align="right">18</td>
 </tr>
 <tr class="odd">
-<td>2</td>
+<td align="left">2</td>
 <td align="right">30</td>
 <td align="right">24</td>
 <td align="right">14</td>

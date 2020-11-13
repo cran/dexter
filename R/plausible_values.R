@@ -107,7 +107,7 @@ plausible_values_ = function(dataSrc, parms=NULL, qtpredicate=NULL, covariates=N
   if(is.null(parms))
   {
     respData = get_resp_data(dataSrc, qtpredicate, summarised=FALSE, extra_columns=covariates, env=env)
-    parms = fit_enorm_(respData, method = 'Bayes', nIterations = nIter.enorm) 
+    parms = fit_enorm_(respData, method = 'Bayes', nDraws = nIter.enorm) 
     respData = get_resp_data(respData, summarised=TRUE, extra_columns=covariates, 
                              protect_x=!is_db(dataSrc))
   } else
@@ -167,7 +167,7 @@ plausible_values_ = function(dataSrc, parms=NULL, qtpredicate=NULL, covariates=N
       group_by_at(covariates) %>%
       mutate(pop = group_number()) %>%
       ungroup() 
-
+#to do: pop moet anders worden genoemd, anders kan "pop" geen covariate zijn
   } else
   {
     # niet varierende pop toevoegen maakt code in pv eenvoudiger

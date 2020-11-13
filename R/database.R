@@ -73,7 +73,7 @@ project_CreateTables = function(db, person_properties=NULL)
     }
   }
 }
-
+# to do: depende on database, this is sqlite specific
 sql_data_type = function(value)
 {
   if(is.date(value))    return(' DATE ')
@@ -81,6 +81,7 @@ sql_data_type = function(value)
   if(is.time(value))    return(' DATETIME ')
   if(is.integer(value)) return(' INTEGER ')
   if(is.numeric(value)) return(' DOUBLE PRECISION ')
+  if(is.logical(value)) return(' INTEGER ')
   " TEXT "
 }
 

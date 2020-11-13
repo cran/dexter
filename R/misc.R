@@ -34,6 +34,24 @@ pg_tick = function(step=NULL, nsteps=NULL)
   
 pg_close = function() cat('\n')
 
+explicit_NA = function(x, replace_NA_with = c('<NA>','.NA.','<<NA>>','__NA__'))
+{
+  if(!is.character(x) || !anyNA(x))
+    return(x)
+  
+  for(v in replace_NA_with)
+  {
+    if(!v %in% x)
+    {
+      x[is.na(x)] = v
+      return(x)
+    }
+  }
+  stop('could not resolve NA values')
+  
+}
+
+
 ## Burnin and thinning for different purposes:
 # cal: Bayesian calibration
 # pv: plausible values
@@ -516,7 +534,7 @@ c2weights<-function(cIM)
 {
   hh=kronecker(t(cIM),cIM,'+')
   gg=eigen(hh)
-  out=gg$vectors[,which.max(gg$values)]
+  out=abs(gg$vectors[,which.max(gg$values)])
   av_indx=which.min(abs(out-mean(out)))
   return(out/out[av_indx])
 }

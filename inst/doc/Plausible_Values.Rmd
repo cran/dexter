@@ -112,7 +112,7 @@ sim_PV2 = function(theta, delta) {
   nit = length(delta)
   sim_func = r_score( tibble(item_id=1:nit, item_score=1, delta=delta))
   simulated_data = sim_func(theta)
-  parms = fit_enorm(simulated_data, method="Bayes", nIterations = 50)
+  parms = fit_enorm(simulated_data, method="Bayes", nDraws = 50)
   
   plot(x=c(min(theta)-.5, max(theta)+.5), y=0:1, main=paste(nit, "items"), bty='l', type='n',
        xlab=bquote(theta), ylab = bquote(Fn(theta)))
