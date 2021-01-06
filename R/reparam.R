@@ -102,6 +102,7 @@ transform.df.parms = function(parms.df, out.format = c('b','beta','eta'), includ
   # start with many checks
   out.format = match.arg(out.format)
   colnames(parms.df) = tolower(colnames(parms.df))
+  parms.df=ungroup(parms.df)
   
   if('delta' %in% colnames(parms.df))
     parms.df = rename(parms.df, beta = 'delta')

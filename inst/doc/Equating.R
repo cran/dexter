@@ -1,6 +1,11 @@
 ## ----setup, include=FALSE-----------------------------------------------------
-knitr::opts_chunk$set(echo = TRUE, dev='CairoPNG') 
+library(knitr)
+opts_chunk$set(echo = TRUE)
 
+if (requireNamespace("Cairo", quietly = TRUE)) 
+{
+   opts_chunk$set(dev='CairoPNG')
+}
 library(dplyr)
 library(ggplot2)
 

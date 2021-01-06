@@ -210,8 +210,10 @@ keys_to_rules = function(keys, include_NA_rule = FALSE)
     })
   } else {
     if (any(keys$key>keys$noptions)) stop("You have out-of-range keys")
-    r = keys %>% group_by(.data$item_id) %>% do({
-      y = tibble(response=1:.$noptions[1], item_score=0)
+    r = keys %>% 
+      group_by(.data$item_id) %>% 
+      do({
+      y = tibble(response=as.character(1:.$noptions[1]), item_score=0)
       y$item_score[.$key[1]] = 1
       y
     })

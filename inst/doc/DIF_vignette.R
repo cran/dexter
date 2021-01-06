@@ -1,5 +1,11 @@
 ## ----setup, include=FALSE-----------------------------------------------------
-knitr::opts_chunk$set(echo = TRUE, fig.width=6, fig.height=5, dev='CairoPNG')
+library(knitr)
+opts_chunk$set(echo = TRUE, fig.width=6, fig.height=5)
+
+if (requireNamespace("Cairo", quietly = TRUE)) 
+{
+   opts_chunk$set(dev='CairoPNG')
+}
 
 ## ----get_data, results='hide', message=FALSE----------------------------------
 library(dexter)

@@ -1,3 +1,7 @@
+# dexter 1.1.2
+
+* update per request from cran, no changes in functionality
+
 # dexter 1.1.1
 
 * profiles/profile_tables can now take a data.frame of item parameters

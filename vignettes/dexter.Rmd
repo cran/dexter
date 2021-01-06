@@ -18,7 +18,12 @@ img{ border:none;}
 
 ```{r setup, include=FALSE}
 library(knitr)
-opts_chunk$set(echo = TRUE,fig.align='center', fig.width=6, fig.height=5, dev='CairoPNG')
+opts_chunk$set(echo = TRUE,fig.align='center', fig.width=6, fig.height=5)
+
+if (requireNamespace("Cairo", quietly = TRUE)) 
+{
+   opts_chunk$set(dev='CairoPNG')
+}
 
 par_hook = function(before, options, envir)
 {

@@ -11,7 +11,8 @@ importFrom(stats, "complete.cases", "cor", "quantile","var",
             "sd", "weighted.mean", "as.formula", "density",
             "cov", "mahalanobis", "model.matrix", "pchisq","rchisq",
             "rgamma", "runif", "setNames", 'rnorm',"chisq.test",
-           "smooth.spline", "coef", "lm", "predict", "dnorm", "qnorm")
+           "smooth.spline", "coef", "lm", "predict", "dnorm", "qnorm",
+           "rbeta","rbinom")
 importFrom(graphics, "plot", "axis", "image", "layout", "par", "lines", "hist",
            "text","legend","abline","segments","arrows","points", "rect","clip")
 importFrom(grDevices, "rainbow","colorRampPalette","col2rgb","rgb")
