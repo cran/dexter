@@ -168,8 +168,10 @@ update_pv_prior_H = function(pv, pop, mu, sigma, mu.a, sigma.a)
 # @details      Given a sample of plausible values from a mixture of two normal distributions
 # this function produces one sample of means and variances of plausible values from their posterior
 #
-# Our implementation using a normal prior is loosely based on Chapter 6 of 
-# Marin, J-M and Robert, Ch, P. (2014). Bayesian essentials with R. 2nd Edition. Springer: New-York
+# Straightforward implementation using conjugate priors. See Chapter 6 of 
+# Marin, J-M and Robert, Ch, P. (2014). Bayesian essentials with R. 
+# 2nd Edition. Springer: New-York. Or Section 6.2.1 of 
+# Frühwirth-Schnatter, S. (2006). Finite mixture and Markov switching models. Springer.
 #
 # Our implementation of Jeffreys prior based on Marsman, M., et al. (2018) An introduction to network 
 # psychometrics: Relating Ising network models to item response theory models. 
@@ -202,7 +204,7 @@ update_pv_prior_mixnorm = function (pv, p, mu, sigma, prior.dist=c('normal','Jef
     for (j in 1:2)
     {
         nj[j]  = sum(z==j) 
-        mu[j]  = rnorm(1, mean = (l[j]*mu[j]+nj[j]*mean(pv[z==j]))/(l[j]+nj[j]), 
+        mu[j]  = rnorm(1, mean = (l[j]*mean_pv+nj[j]*mean(pv[z==j]))/(l[j]+nj[j]), 
                            sd = sqrt(sigma[j]^2/(nj[j]+l[j])))
     }
     
@@ -380,3 +382,28 @@ pv = function(x, design, b, a, nPV, from = NULL, by = NULL, prior.dist = c("norm
   }
 }
 
+
+# borrowed the following from mvtnorm source for the time being
+# so we don't have to import a whole package
+# will make a cpp implementation for next version so this can be removed
+rmvnorm = function(n,mean,sigma)
+{
+  ev = eigen(sigma, symmetric = TRUE)
+  R = t(ev$vectors %*% (t(ev$vectors) * sqrt(pmax(ev$values, 0))))
+  retval = matrix(rnorm(n * ncol(sigma)), nrow = n, byrow = TRUE) %*% R
+  retval = sweep(retval, 2, mean, "+")
+  colnames(retval) = names(mean)
+  retval
+}
+
+
+update_MVNprior = function(pvs,Sigma)
+{
+  m_pv = colMeans(pvs)
+  nP = nrow(pvs)
+  mu = rmvnorm(1, mean=m_pv,sigma=Sigma/nP)
+  
+  S=(t(pvs)-m_pv)%*%t(t(pvs)-m_pv)
+  Sigma = solve(rWishart(1,nP-1,solve(S))[,,1]) 
+  return(list(mu = mu, Sigma = Sigma))
+}

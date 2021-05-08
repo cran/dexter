@@ -1,12 +1,5 @@
 
-# @param parms An object returned by function \code{fit_enorm} and containing
-# parameter estimates. If parms is given the function provides plausible values conditional on the 
-# item parameters. These are considered known. If parms is Bayesian, a different random draw of the item parmaters 
-# is used to generate each plausible value (unless use_draw is set).
-#  If \code{parms} is \code{NULL}, Bayesian parameters are calculated from the data.
 
-
-##########################################
 #' Draw plausible values
 #'
 #' Draws plausible values based on test scores
@@ -75,7 +68,6 @@ plausible_values = function(dataSrc, parms=NULL, predicate=NULL, covariates=NULL
   check_dataSrc(dataSrc)
   check_num(nPV, .length=1, .min=1)
   
-  # pipe seems to cause problems on apple in pv vignette, so this is nested
   df_format(
     mutate_if(
       plausible_values_(dataSrc, parms, qtpredicate=qtpredicate, covariates=covariates, nPV=nPV, 
@@ -91,7 +83,7 @@ plausible_values = function(dataSrc, parms=NULL, predicate=NULL, covariates=NULL
 
 plausible_values_ = function(dataSrc, parms=NULL, qtpredicate=NULL, covariates=NULL, nPV=1, use_draw=NULL, 
                              env=NULL, prior.dist = c("normal", "mixture"),
-                             merge_within_persons=merge_within_persons)
+                             merge_within_persons=merge_within_persons, progress = show_progress())
 {
   if(is.null(env)) env = caller_env()
   from = Gibbs.settings$from.pv
@@ -101,17 +93,26 @@ plausible_values_ = function(dataSrc, parms=NULL, qtpredicate=NULL, covariates=N
   
   prior.dist = match.arg(prior.dist)
 
-  if(show_progress())
-    pg_start()
+
   
   if(is.null(parms))
   {
+    if(progress) cat('(1/2) estimating item parameters\n')
+    
     respData = get_resp_data(dataSrc, qtpredicate, summarised=FALSE, extra_columns=covariates, env=env)
-    parms = fit_enorm_(respData, method = 'Bayes', nDraws = nIter.enorm) 
+    parms = fit_enorm_(respData, method = 'Bayes', nDraws = nIter.enorm, progress = progress) 
     respData = get_resp_data(respData, summarised=TRUE, extra_columns=covariates, 
                              protect_x=!is_db(dataSrc))
+    if(progress)
+    {
+      cat('(2/2) estimating plausible values\n')
+      pg_start()
+    }  
   } else
   {
+    if(progress)
+      pg_start()
+    
     if(inherits(parms,'data.frame'))
     {
       parms = transform.df.parms(parms,'b', TRUE)
@@ -126,7 +127,9 @@ plausible_values_ = function(dataSrc, parms=NULL, qtpredicate=NULL, covariates=N
                              parms_check=pcheck,
                              merge_within_persons=FALSE)
   }
-  # to do: use the new function
+  
+  
+  # to do: use simplify_parms
   if(inherits(parms,'data.frame'))
   {
     fl = parms %>%
@@ -165,20 +168,23 @@ plausible_values_ = function(dataSrc, parms=NULL, qtpredicate=NULL, covariates=N
     group_number = (function(){i = 0L; function() i <<- i+1L })()
     x = x %>% 
       group_by_at(covariates) %>%
-      mutate(pop = group_number()) %>%
+      mutate(pop__ = group_number()) %>%
       ungroup() 
 #to do: pop moet anders worden genoemd, anders kan "pop" geen covariate zijn
   } else
   {
     # niet varierende pop toevoegen maakt code in pv eenvoudiger
-    x$pop = 1L
+    x$pop__ = 1L
   }
   design = split(design, design$booklet_id, drop=TRUE)
   
-  y = pv(x[,c('booklet_id','person_id','booklet_score','pop')], 
+  y = pv(select(x, .data$booklet_id, .data$person_id, .data$booklet_score, pop = .data$pop__),
          design, b, a, nPV, from = from, by = step, prior.dist=prior.dist)
   
   colnames(y) = c('booklet_id','person_id','booklet_score',paste0('PV',1:nPV))
+  
+  if(progress)
+    pg_close()
   
   if(is.null(covariates))
   {

@@ -47,16 +47,16 @@ get_persons(db) %>%
 tt = tia_tables(db)
 
 ## ---- eval=FALSE--------------------------------------------------------------
-#  tt$testStats
+#  tt$booklets
 
 ## ---- echo=FALSE--------------------------------------------------------------
-kable(tt$testStats, digits=3)
+kable(tt$booklets, digits=3)
 
 ## ---- eval=FALSE--------------------------------------------------------------
-#  tt$itemStats
+#  tt$items
 
 ## ---- echo=FALSE--------------------------------------------------------------
-kable(tt$itemStats, digits=3)
+kable(tt$items, digits=3)
 
 ## -----------------------------------------------------------------------------
 distractor_plot(db, 'S1DoShout')

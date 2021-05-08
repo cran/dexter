@@ -3,7 +3,8 @@
 # parms can be data frame or a parms object
 #
 # returns list: a, b, design (including first and last), items(including first and last)
-simplify_parms = function(parms, design=NULL, use_draw=NULL, collapse_b=FALSE)
+simplify_parms = function(parms, design=NULL, use_draw=NULL, collapse_b=FALSE,
+                          zero_indexed=FALSE)
 {
   check_df(design, 'item_id', nullable=TRUE)
   if(!is.null(design))
@@ -84,6 +85,13 @@ simplify_parms = function(parms, design=NULL, use_draw=NULL, collapse_b=FALSE)
       }
       design = inner_join(design, fl, by='item_id')
     }
+  }
+  if(zero_indexed)
+  {
+    fl$first = fl$first - 1L
+    fl$last = fl$last - 1L
+    design$first = design$first - 1L
+    design$last = design$last - 1L
   }
   
   list(a=a, b=b, design=design, items = fl)

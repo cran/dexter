@@ -15,9 +15,9 @@ install.packages('dexter')
 ```
 
 If you encounter a bug, please post a minimal reproducible example on
-[github](https://github.com/jessekps/dexter/issues). We post news and
-examples on a [blog](https://dexterities.netlify.app), it’s also the
-place for general questions.
+[github](https://github.com/dexter-psychometrics/dexter/issues). We post
+news and examples on a [website and
+blog](https://dexter-psychometrics.github.io/dexter).
 
 Example
 -------
@@ -33,25 +33,58 @@ add_booklet(db, verbAggrData, booklet_id = "verb_agg")
 # Classical test theory
 tia = tia_tables(db)
 
-tia$testStats
+tia$booklets
 ```
 
-| booklet\_id |  nItems|  alpha|  meanP|  meanRit|  meanRir|  maxTestScore|    N|
-|:------------|-------:|------:|------:|--------:|--------:|-------------:|----:|
-| verb\_agg   |      24|  0.888|  0.339|    0.527|    0.468|            48|  316|
+<table>
+<colgroup>
+<col style="width: 13%" />
+<col style="width: 9%" />
+<col style="width: 7%" />
+<col style="width: 14%" />
+<col style="width: 10%" />
+<col style="width: 10%" />
+<col style="width: 21%" />
+<col style="width: 12%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th style="text-align: left;">booklet_id</th>
+<th style="text-align: right;">n_items</th>
+<th style="text-align: right;">alpha</th>
+<th style="text-align: right;">mean_pvalue</th>
+<th style="text-align: right;">mean_rit</th>
+<th style="text-align: right;">mean_rir</th>
+<th style="text-align: right;">max_booklet_score</th>
+<th style="text-align: right;">n_persons</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td style="text-align: left;">verb_agg</td>
+<td style="text-align: right;">24</td>
+<td style="text-align: right;">0.888</td>
+<td style="text-align: right;">0.339</td>
+<td style="text-align: right;">0.527</td>
+<td style="text-align: right;">0.468</td>
+<td style="text-align: right;">48</td>
+<td style="text-align: right;">316</td>
+</tr>
+</tbody>
+</table>
 
 ``` r
-head(tia$itemStats)
+head(tia$items)
 ```
 
-| booklet\_id | item\_id    |  meanScore|  sdScore|  maxScore|  pvalue|    rit|    rir|    n|
-|:------------|:------------|----------:|--------:|---------:|-------:|------:|------:|----:|
-| verb\_agg   | S1DoCurse   |      1.082|    0.807|         2|   0.541|  0.582|  0.519|  316|
-| verb\_agg   | S1DoScold   |      0.832|    0.815|         2|   0.416|  0.651|  0.596|  316|
-| verb\_agg   | S1DoShout   |      0.468|    0.709|         2|   0.234|  0.520|  0.460|  316|
-| verb\_agg   | S1WantCurse |      1.123|    0.827|         2|   0.562|  0.537|  0.468|  316|
-| verb\_agg   | S1WantScold |      0.930|    0.850|         2|   0.465|  0.593|  0.528|  316|
-| verb\_agg   | S1WantShout |      0.712|    0.777|         2|   0.356|  0.529|  0.464|  316|
+| booklet\_id | item\_id    |  mean\_score|  sd\_score|  max\_score|  pvalue|    rit|    rir|  n\_persons|
+|:------------|:------------|------------:|----------:|-----------:|-------:|------:|------:|-----------:|
+| verb\_agg   | S1DoCurse   |        1.082|      0.807|           2|   0.541|  0.582|  0.519|         316|
+| verb\_agg   | S1DoScold   |        0.832|      0.815|           2|   0.416|  0.651|  0.596|         316|
+| verb\_agg   | S1DoShout   |        0.468|      0.709|           2|   0.234|  0.520|  0.460|         316|
+| verb\_agg   | S1WantCurse |        1.123|      0.827|           2|   0.562|  0.537|  0.468|         316|
+| verb\_agg   | S1WantScold |        0.930|      0.850|           2|   0.465|  0.593|  0.528|         316|
+| verb\_agg   | S1WantShout |        0.712|      0.777|           2|   0.356|  0.529|  0.464|         316|
 
 ``` r
 # IRT, extended nominal response model
@@ -96,9 +129,9 @@ head(pv)
 
 | booklet\_id | person\_id  |  booklet\_score|         PV1|         PV2|         PV3|         PV4|         PV5|
 |:------------|:------------|---------------:|-----------:|-----------:|-----------:|-----------:|-----------:|
-| verb\_agg   | dx\_0000001 |              13|  -1.1786824|  -1.3833165|  -1.0008358|  -0.9959936|  -0.8437848|
-| verb\_agg   | dx\_0000002 |              28|   0.3580404|   0.3585479|   0.1231038|   0.4052475|  -0.7093408|
-| verb\_agg   | dx\_0000003 |               4|  -2.8890364|  -1.8880712|  -2.7836238|  -2.1644630|  -2.1182144|
-| verb\_agg   | dx\_0000004 |              19|  -0.4643743|  -0.5013221|  -0.4507560|  -0.4164355|  -1.0307969|
-| verb\_agg   | dx\_0000005 |               7|  -1.6674313|  -1.5603326|  -1.6937758|  -1.2779853|  -1.6300234|
-| verb\_agg   | dx\_0000006 |              25|   0.0862120|   0.3463346|  -0.2961962|  -0.3580133|   0.0350544|
+| verb\_agg   | dx\_0000001 |              13|  -0.9505271|  -1.2622800|  -1.3092606|  -0.9385121|  -1.0107025|
+| verb\_agg   | dx\_0000002 |              28|   0.3843105|   0.4266506|  -0.2573231|   0.4172153|   0.2274623|
+| verb\_agg   | dx\_0000003 |               4|  -1.8126859|  -1.6491577|  -2.2782751|  -1.6018220|  -1.8556320|
+| verb\_agg   | dx\_0000004 |              19|  -0.4177323|  -0.0513622|  -0.1707532|   0.2492121|  -0.5798864|
+| verb\_agg   | dx\_0000005 |               7|  -1.3379007|  -2.1090646|  -1.3493621|  -1.8811472|  -1.3996091|
+| verb\_agg   | dx\_0000006 |              25|  -0.1734033|  -0.0129172|  -0.0249781|  -0.0833049|  -0.3722655|

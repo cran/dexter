@@ -362,21 +362,41 @@ coef.rim = function(object, ...)
 #' 
 r_score_IM = function(m, scores)
 {
-  if(!inherits(m,'rim'))
+  
+  
+  if(inherits(m,'data.frame'))
+  {
     stop('input `m` must be of class "rim"')
+    # this does not yet work
+    if('beta_IM' %in% colnames(m) && !'beta' %in% colnames(m))
+      m$beta = m$beta_IM
+    m = arrange(m,.data$item_id, .data$item_score)
+    prms = simplify_parms(m)
+
+    a = prms$a
+    bIM = prms$b
+    first = prms$items$first
+    last = prms$items$last
+    cIM = m$sigma
+    
+  } else if(inherits(m,'rim'))
+  {
+    first = m$inputs$ssI$first
+    last = m$inputs$ssI$last
+    a = m$inputs$ssIS$item_score
+    bIM = m$est$bIM
+    cIM = m$est$cIM
+  } 
+  else stop('input `m` must be of class "rim"')
+ 
+  maxs = sum(a[last])
   
   if(any(scores>maxs))
     stop('scores may not be larger than the maximum score on the test')
   
   if(any(scores<0))
     stop('all scores must be positive')
-    
-  first = m$inputs$ssI$first
-  last = m$inputs$ssI$last
-  a = m$inputs$ssIS$item_score
-  bIM = m$est$bIM
-  cIM = m$est$cIM
-  maxs = sum(a[last])
+  
   
   scoretab = score_tab_single(scores, maxs)
   

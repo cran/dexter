@@ -34,6 +34,61 @@ pg_tick = function(step=NULL, nsteps=NULL)
   
 pg_close = function() cat('\n')
 
+# to do: use this prog bar everywhere instead of simple one above
+prog_bar = setRefClass('prog_bar',
+  fields = list(nsteps='integer', step='integer', pshow='logical', w='integer', l='integer',p='integer',
+                dxpg='logical'),
+  methods = list(
+    close = function()
+    {
+      options(dexter.progress=dxpg)
+      if(pshow) cat('\n')
+    },
+    initialize = function(nsteps_=-1L, prog_show=show_progress())
+    {
+      nsteps <<- as.integer(nsteps_)
+      pshow <<- prog_show
+      p <<- -1L
+      l <<- -1L
+      step <<- 0L
+      dxpg <<- as.logical(options(dexter.progress=FALSE))
+
+      if(pshow)
+      {
+        if(!is.null(nsteps))
+        {
+          w <<- getOption("width") - nchar('| 100%') - 2L
+          draw_perc()
+        } else
+        {
+          cat('|')
+        }
+      }
+    },
+    draw_perc = function()
+    {
+      old = l+p
+      if(step > nsteps) step <<- nsteps
+      p <<- as.integer(100L*step/nsteps)
+      l <<- as.integer(w * step/nsteps)
+      if(old != l+p)
+      {
+        cat(sprintf('\r|%s%s| %3i%%',strrep('=',l),strrep(' ',w-l),p))
+      }
+    },
+    tick = function(nticks=1L)
+    {
+      step <<- step + as.integer(nticks)
+      if(pshow)
+      {
+        if(is.null(nsteps)) cat('=')
+        else draw_perc()
+      }
+    } 
+  ))
+
+
+
 explicit_NA = function(x, replace_NA_with = c('<NA>','.NA.','<<NA>>','__NA__'))
 {
   if(!is.character(x) || !anyNA(x))
@@ -621,5 +676,35 @@ blockMatrixDiagonal<-function(...){
     index<-index+dimensions[k]
   }
   finalMatrix
+}
+
+#
+# mean and variance of Y|x if x,y is multivariate normal
+#
+# with mean mu and variance-covariance matrix sigma
+# @param m vector of means
+# @param sigma covariance matrix
+# @param y.ind indices dependent variable(s)
+# @param x.ind indices conditioning variables. If null its just all others
+# @param x.value value of conditioning variables
+# 
+condMoments = function(mu, sigma, y.ind, x.ind=NULL, x.value )
+{
+  if (is.null(x.ind)) x.ind = setdiff(1:length(mu), y.ind)
+  B = sigma[y.ind, y.ind]
+  C = sigma[y.ind, x.ind, drop = FALSE]
+  D = sigma[x.ind, x.ind]
+  CDinv = C %*% solve(D)
+  if (is.vector(x.value))
+  {
+    cMu = c(mu[y.ind] + CDinv %*% (x.value - mu[x.ind]))
+  }else
+  {
+    nP = nrow(x.value)
+    cMu = rep(0,nP)
+    for (i in 1:nP) cMu[i] = mu[y.ind] + CDinv %*% (x.value[i,] - mu[x.ind])
+  }
+  cVar = B - CDinv %*% t(C)
+  return(list(mu=cMu, sigma=cVar))
 }
 

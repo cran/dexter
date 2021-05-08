@@ -139,7 +139,8 @@ distractor_plot = function(dataSrc, item_id, predicate=NULL, legend=TRUE, curtai
   {
     ipos = respData$design
   }
-  
+  if(inherits(dataSrc,'data.frame'))
+     respData$x = mutate(respData$x,response=coalesce(.data$response,'<NA>'))
 
   default.args = list(sub = "Pval: $pvalue:.2f, Rit: $rit:.3f, Rir: $rir:.3f", 
                       xlab = "Sum score", ylab = "Proportion", cex.sub = 0.8, xaxs="i", bty="l")
@@ -149,6 +150,7 @@ distractor_plot = function(dataSrc, item_id, predicate=NULL, legend=TRUE, curtai
                              '$item_id in booklet $booklet_id')
   
   user.args = list(...)
+  
   
   rsp_counts = respData$x %>%
     count(.data$booklet_id, .data$response, .data$item_score, .data$booklet_score)

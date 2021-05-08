@@ -17,7 +17,6 @@
 #' otherwise, a Gibbs sampler will be used to produce a sample from the posterior
 #' @param nDraws Number of Gibbs samples when estimation method is Bayes. 
 #' @param merge_within_persons whether to merge different booklets administered to the same person, enabling linking over persons as well as booklets.
-#' @param nIterations deprecated
 #' @return An object of type \code{prms}. The prms object can be cast to a data.frame of item parameters 
 #' using function `coef` or used directly as input for other Dexter functions.
 #' @details
@@ -42,11 +41,8 @@
 #' \code{\link{plot.prms}}, and \code{\link{plausible_scores}}
 #'
 fit_enorm = function(dataSrc, predicate = NULL, fixed_params = NULL, method=c("CML", "Bayes"), 
-                     nDraws=1000, merge_within_persons=FALSE, nIterations=NULL)
+                     nDraws=1000, merge_within_persons=FALSE)
 {
-  if(!is.null(nIterations))
-    stop("Argument nIterations was removed in a recent version of dexter. Use nDraws instead.")
-  
   dplyr_prog = options(dplyr.show_progress=FALSE)
   on.exit(options(dplyr.show_progress=dplyr_prog))
   
@@ -256,7 +252,7 @@ plot.prms = function(x, item_id=NULL, dataSrc=NULL, predicate=NULL, nbins=5, ci 
       }) %>%
       ungroup() 
     
-    x$inputs$plt = get_sufStats_nrm(respData)$plt
+    x$inputs$plt = get_sufStats_nrm(respData, check_sanity=FALSE)$plt
   }
   
 
@@ -635,3 +631,144 @@ print.sim_func = function(x,...) cat('function to simulate item scores: (x_i1, .
 print.pmf_func = function(x,...) cat('Conditional score distribution function: P(x_+|theta)\n')
 
 
+#' Latent correlations
+#'
+#' Estimates correlations between latent traits. Use an item_property to distinguish the different scales. 
+#' This function uses plausible values so results may differ slightly between calls. 
+#' Note: this is a new and slightly experimental function and therefore still a bit slow. It will probably 
+#' become faster in future versions of dexter.
+#'
+#' @param dataSrc a connection to a dexter database or a data.frame with columns: person_id, item_id, item_score
+#' @param item_property An item property to distinguish the different scales.
+#' @param predicate An optional expression to subset data, if NULL all data is used
+#' @param nDraws Number of draws for plausible values
+#' @param use only complete.obs at this time. Respondents who don't have a score for one or more scales are removed.
+#' 
+#' @return List containing a correlation matrix and corresponding standard deviations
+#' 
+latent_cor = function(dataSrc, item_property, predicate=NULL, nDraws=500, use="complete.obs")
+{
+  check_dataSrc(dataSrc)
+  check_num(nDraws, 'integer', .length=1, .min=1)
+  qtpredicate = eval(substitute(quote(predicate)))
+  env = caller_env()
+  
+  # use = pmatch(use, c("all.obs", "complete.obs", 
+  #                     "pairwise.complete.obs", "everything", "na.or.complete"))
+  
+  if(use != "complete.obs")
+    stop("only 'complete.obs' is currently implemented")
+  
+  from = 5
+  by = 2
+  which.keep = seq(from,(from-by)*(from>by)+by*nDraws,by=by)
+  nIter=max(which.keep)
+  
+  if(is.matrix(dataSrc))
+  {
+    # to do: we can take a char vector of length ncol, but that goes for all
+    # analyses functions with item_properties, ip's can be made more flexible for df as well
+    stop("a matrix datasrc is not yet implemented for this function")
+  }
+  respData = get_resp_data(dataSrc, qtpredicate, env=env, extra_columns=item_property,
+                           merge_within_persons=TRUE)
+  
+  respData$x[[item_property]] = ffactor(as.character(respData$x[[item_property]]))
+  lvl = levels(respData$x[[item_property]])
+  nd = length(lvl)
+  
+  pgb = prog_bar(nIter + 4*nd)
+  on.exit({pgb$close()})
+  
+  respData$x = respData$x %>%
+    group_by(.data$person_id) %>%
+    filter(nd == n_distinct(.data[[item_property]])) %>%
+    ungroup()
+  
+  respData$x$person_id = ffactor(respData$x$person_id,as_int=TRUE)
+  
+  
+  np = max(respData$x$person_id)
+  
+  respData = lapply(split(respData$x, respData$x[[item_property]]), get_resp_data)
+  models = lapply(respData, fit_enorm)
+  abl = mapply(ability, respData, models, SIMPLIFY=FALSE,
+               MoreArgs = list(method="EAP", prior="Jeffreys",standard_errors=FALSE))
+  
+  pgb$tick(2*nd)
+  
+  # some matrices
+  # we cannot rely on order in ability so this is the way for now
+  abl_mat = matrix(NA_real_,np,nd)
+  for(d in 1:nd)
+    abl_mat[abl[[d]]$person_id,d] = abl[[d]]$theta
+
+  
+  acor = cor(abl_mat,use=use)
+  pv = matrix(0,np,nd)
+  
+  reliab = rep(0,nd)
+  sd_pv = rep(0,nd)
+  mean_pv = rep(0,nd)
+  for (i in 1:nd)
+  {
+    pvs = plausible_values(respData[[i]],models[[i]],nPV = 2)
+    reliab[i] = cor(pvs$PV1,pvs$PV2)
+    sd_pv[i] = sd(pvs$PV1)
+    mean_pv[i] = mean(pvs$PV1)
+    pv[pvs$person_id,i] = pvs$PV1
+  }
+  
+  pgb$tick(2*nd)
+  
+  for (i in 1:(nd-1))
+  {
+    for (j in ((i+1):nd)){
+      acor[i,j] = acor[i,j]/sqrt(reliab[i]*reliab[j])
+      acor[j,i] = acor[i,j]
+    }
+  }
+  
+  out_sd=matrix(0,nd,nd)
+  out_cor = acor
+  
+  # make everything simple and zero indexed
+  models = lapply(models, simplify_parms, zero_indexed=TRUE)
+  respData = lapply(respData, get_resp_data, summarised=TRUE)
+  for(d in 1:nd)
+  {
+    respData[[d]]$x$booklet_id = as.integer(respData[[d]]$x$booklet_id) - 1L
+    models[[d]]$bcni = c(0L,cumsum(table(as.integer(models[[d]]$design$booklet_id))))
+  }
+  
+  prior = list(mu=mean_pv, Sigma = diag(1.7*sd_pv) %*% acor %*% diag(1.7*sd_pv))
+  
+  store = matrix(0, length(which.keep), length(as.vector(prior$Sigma)))
+  tel = 1
+  for (i in 1:nIter)
+  {
+    for (d in 1:nd)
+    {
+      cons = condMoments(prior$mu, prior$Sigma, d, x.value=pv[,-d]) 
+
+      PV_sve(models[[d]]$b, models[[d]]$a, models[[d]]$design$first, models[[d]]$design$last, 					
+             models[[d]]$bcni,
+             respData[[d]]$x$booklet_id, respData[[d]]$x$booklet_score, cons$mu, sqrt(cons$sigma),
+             pv,d-1L, 10L)
+    }
+    
+    
+    prior = try({update_MVNprior(pv,prior$Sigma)})
+
+    if (i %in% which.keep){
+      store[tel,] = as.vector(cov2cor(prior$Sigma))
+      tel=tel+1
+    }
+    pgb$tick()
+  }
+  out_sd=matrix(apply(store,2,sd),nd,nd)
+  diag(out_sd)=0
+  out_cor = matrix(colMeans(store),nd,nd)
+
+  return(list(cor = out_cor, sd=out_sd))
+}
