@@ -3,6 +3,14 @@
 # faster factor, does not handle or check for NA values
 ffactor = function (x, levels=NULL, as_int=FALSE) 
 {
+  if(is.factor(x))
+  {
+    f = if(is.null(levels)) factor(x) else factor(x,levels=levels)
+    if(as_int)
+      return(as.integer(f))
+    return(f)
+  }
+  
   if(is.null(levels))
   {
     fast_factor(x, as_int)
@@ -10,6 +18,14 @@ ffactor = function (x, levels=NULL, as_int=FALSE)
   {
     fast_factor_lev(x, levels, as_int)
   }
+}
+
+stop_no_param = function(items)
+{
+  cat('\n')
+  message("no parameters for these items and/or scores")
+  print(items)
+  stop("no parameters for some items and/or scores in your data", call.=FALSE) 
 }
 
 
@@ -166,13 +182,8 @@ get_resp_data = function(dataSrc, qtpredicate=NULL,
         
         no_par = dplyr::intersect(itm_sc, no_par)
 
-        
         if(nrow(no_par) > 0)
-        {
-          message("no parameters for these items and/or scores")
-          print(no_par)
-          stop("no parameters for some items and/or scores in your data")
-        }
+          stop_no_param(no_par)
       }
     }
     out = list(x=x, design=design, summarised=TRUE, merge_within_persons = merge_within_persons)
@@ -242,14 +253,11 @@ get_resp_data = function(dataSrc, qtpredicate=NULL,
       {
         itm_scr$item_id = ffactor(itm_scr$item_id, levels=design$item_id)
         itm_scr = itm_scr %>%
-          anti_join(x, by=c('item_id','item_score'))
+          semi_join(x, by=c('item_id','item_score'))
+        # bugfix: anti => semi keeping socres found in data
       }
       if(NROW(itm_scr)>0)
-      {
-        message("no parameters for these items and/or scores")
-        print(itm_scr)
-        stop("no parameters for some items and/or scores in your data")
-      }
+        stop_no_param(itm_scr)
     }
     
     if(!is_person_booklet_sorted(x$booklet_id, x$person_id))
@@ -372,8 +380,7 @@ resp_data.from_df = function(x, extra_columns=NULL, summarised=FALSE,
   
   pointers = lapply(x, ppoint)
   
-  if(!is.factor(x$item_id))
-    x$item_id = ffactor(x$item_id)
+  x$item_id = ffactor(x$item_id)
   
   x$item_score = as.integer(x$item_score) 
   
@@ -384,11 +391,7 @@ resp_data.from_df = function(x, extra_columns=NULL, summarised=FALSE,
                                     parms_check[parms_check$item_score>0, c('item_id','item_score')])}) 
     
     if(nrow(uncalibrated) > 0)
-    {
-      message("no parameters for these items and/or scores:")
-      print(uncalibrated)
-      stop("no parameters for some items and/or scores in your data")
-    }
+      stop_no_param(uncalibrated)
   }
   
   if(!is.integer(x$person_id) && !is.factor(x$person_id))
@@ -396,8 +399,7 @@ resp_data.from_df = function(x, extra_columns=NULL, summarised=FALSE,
 
   if('booklet_id' %in% all_columns)
   {
-    if(!is.factor(x$booklet_id))
-      x$booklet_id = ffactor(x$booklet_id)
+    x$booklet_id = ffactor(x$booklet_id)
     
     if(merge_within_persons)
     { 
@@ -578,6 +580,25 @@ resp_data.from_matrix = function(X, summarised = FALSE, retain_person_id = TRUE,
     class(out$x$person_id) = 'factor'
     levels(out$x$person_id) = rownames(X)
   } 
+  
+  if(length(levels(out$design$booklet_id)) > n_distinct(out$design$booklet_id))
+  {
+    # rows with all NA responses in input matrix, some repair necessary
+    if(summarised)
+      out$x = semi_join(out$x, out$design, by='booklet_id')
+
+    out$x$booklet_id = droplevels(out$x$booklet_id)
+    out$design$booklet_id = droplevels(out$design$booklet_id)
+  }
+  if(length(levels(out$design$item_id)) > n_distinct(out$design$item_id))
+  {
+    # columns with all NA, some repair necessary
+    out$design$item_id = droplevels(out$design$item_id)
+    if(!summarised)
+      out$x$item_id = droplevels(out$x$item_id)
+  }
+  
+  
   out$summarised = summarised
   class(out) = append('dx_resp_data', class(out))
   out
@@ -746,7 +767,7 @@ by.dx_resp_data = function (data, INDICES, FUN, ..., simplify = TRUE)
     
 
     class(r) = append('dx_resp_data', class(r))
-    do.call(FUN, append(list(r),args))
+    do.call(FUN, append(list(dataSrc = r),args))
   }, 
   simplify = simplify)
 }
@@ -785,11 +806,22 @@ get_resp_matrix = function(dataSrc, qtpredicate=NULL, env=NULL)
   {
     x = get_responses_(dataSrc, qtpredicate = qtpredicate, columns = c('person_id','item_id','item_score'), env = env) 
 
-    if(!is.factor(x$person_id))
+    if(is.factor(x$person_id))
+    {
+      x$person_id = droplevels(x$person_id)
+    } else
+    {
       x$person_id = ffactor(x$person_id)
+    }
     
-    if(!is.factor(x$item_id))
+    if(is.factor(x$item_id))
+    {
+      x$item_id = droplevels(x$item_id)
+    } else
+    {
       x$item_id = ffactor(x$item_id)
+    }
+      
   }
   out = matrix(NA_integer_, nlevels(x$person_id),nlevels(x$item_id))
   fill_resp_matrix(x$person_id, x$item_id, x$item_score, out)

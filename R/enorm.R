@@ -43,39 +43,30 @@
 fit_enorm = function(dataSrc, predicate = NULL, fixed_params = NULL, method=c("CML", "Bayes"), 
                      nDraws=1000, merge_within_persons=FALSE)
 {
-  dplyr_prog = options(dplyr.show_progress=FALSE)
-  on.exit(options(dplyr.show_progress=dplyr_prog))
-  
   method = match.arg(method)
   check_dataSrc(dataSrc)
   check_num(nDraws, 'integer', .length=1, .min=1)
   qtpredicate = eval(substitute(quote(predicate)))
   env = caller_env()
- 
-  
-  
+
   fit_enorm_(dataSrc, qtpredicate = qtpredicate, fixed_params = fixed_params, 
              method=method, nDraws=nDraws, env=env, merge_within_persons=merge_within_persons)
 }
 
 
 fit_enorm_ = function(dataSrc, qtpredicate = NULL, fixed_params = NULL, method=c("CML", "Bayes"), 
-                      nDraws=1000, env=NULL, merge_within_persons=FALSE,progress = show_progress()) 
+                      nDraws=1000, env=NULL, merge_within_persons=FALSE) 
 {
   method = match.arg(method)
   if(is.null(env)) env = caller_env()
 
-  if(progress) pg_start()
-  if(progress && is_db(dataSrc))
-    cat(' retrieving data...')
-  
+  pb = get_prog_bar(retrieve_data = is_db(dataSrc), nsteps = if.else(method=='Bayes',nDraws,NULL))
+  on.exit({pb$close()})
+
   respData = get_resp_data(dataSrc, qtpredicate, summarised=FALSE, env=env, retain_person_id=FALSE,
                            merge_within_persons = merge_within_persons)
   
-  if(progress && is_db(dataSrc))
-    cat('\r                          \r|')
-  
-
+  pb$tick()
   ss = get_sufStats_nrm(respData)
 
   ssI = ss$ssI
@@ -83,7 +74,6 @@ fit_enorm_ = function(dataSrc, qtpredicate = NULL, fixed_params = NULL, method=c
   design = ss$design
   plt = ss$plt
   scoretab = ss$scoretab
-  
   
   fixed_b = NULL
   has_fixed_parms = !is.null(fixed_params)
@@ -141,8 +131,6 @@ fit_enorm_ = function(dataSrc, qtpredicate = NULL, fixed_params = NULL, method=c
 
   } else 
   {
-    
-    
     result = calibrate_Bayes(scoretab=scoretab, design=design, sufI=ssIS$sufI, a=ssIS$item_score,
                               first=ssI$first, last=ssI$last, nIter=nDraws, fixed_b=fixed_b)
     
@@ -176,6 +164,7 @@ fit_enorm_ = function(dataSrc, qtpredicate = NULL, fixed_params = NULL, method=c
 
 
 # to~do: is there a better plot for calibrate bayes?
+
 #' Plot for the extended nominal Response model
 #' 
 #' The plot shows 'fit' by comparing the expected score based on the model (grey line)
@@ -418,7 +407,7 @@ coef.prms = function(object, hpd = 0.95, what=c('items','var','posterior'), ...)
 
 #' Functions of theta
 #' 
-#' returns information function, expected score function, score distribution, or score simulation function 
+#' returns information function, expected score function, score simulation function, or score distribution 
 #' for a single item, an arbitrary group of items or all items
 #' 
 #' @param parms object produced by \code{\link{fit_enorm}} or a data.frame with columns item_id, item_score and, 
@@ -638,18 +627,25 @@ print.pmf_func = function(x,...) cat('Conditional score distribution function: P
 #' Note: this is a new and slightly experimental function and therefore still a bit slow. It will probably 
 #' become faster in future versions of dexter.
 #'
-#' @param dataSrc a connection to a dexter database or a data.frame with columns: person_id, item_id, item_score
-#' @param item_property An item property to distinguish the different scales.
+#' @param dataSrc A connection to a dexter database or a data.frame with columns: person_id, item_id, item_score and 
+#' the item_property
+#' @param item_property The name of the item property used to define the domains. If \code{dataSrc} is a dexter db then the
+#' item_property must match a known item property. If datasrc is a data.frame, item_property must be equal to
+#'  one of its column names.
 #' @param predicate An optional expression to subset data, if NULL all data is used
 #' @param nDraws Number of draws for plausible values
-#' @param use only complete.obs at this time. Respondents who don't have a score for one or more scales are removed.
+#' @param hpd width of Bayesian highest posterior density interval around the correlations, 
+#'  value must be between 0 and 1.
+#' @param use Only complete.obs at this time. Respondents who don't have a score for one or more scales are removed.
 #' 
-#' @return List containing a correlation matrix and corresponding standard deviations
+#' @return List containing a estimated correlation matrix, the corresponding standard deviations, 
+#' and the lower and upper limits of the highest posterior density interval
 #' 
-latent_cor = function(dataSrc, item_property, predicate=NULL, nDraws=500, use="complete.obs")
+latent_cor = function(dataSrc, item_property, predicate=NULL, nDraws=500, hpd=0.95, use="complete.obs")
 {
   check_dataSrc(dataSrc)
   check_num(nDraws, 'integer', .length=1, .min=1)
+  check_num(hpd,  .length=1, .min=1/nDraws,.max=1)
   qtpredicate = eval(substitute(quote(predicate)))
   env = caller_env()
   
@@ -658,6 +654,9 @@ latent_cor = function(dataSrc, item_property, predicate=NULL, nDraws=500, use="c
   
   if(use != "complete.obs")
     stop("only 'complete.obs' is currently implemented")
+  
+  pb = get_prog_bar(nDraws, retrieve_data = is_db(dataSrc), lock=TRUE)
+  on.exit({pb$close()})
   
   from = 5
   by = 2
@@ -677,8 +676,7 @@ latent_cor = function(dataSrc, item_property, predicate=NULL, nDraws=500, use="c
   lvl = levels(respData$x[[item_property]])
   nd = length(lvl)
   
-  pgb = prog_bar(nIter + 4*nd)
-  on.exit({pgb$close()})
+  pb$set_nsteps(nIter + 4*nd)
   
   respData$x = respData$x %>%
     group_by(.data$person_id) %>%
@@ -689,13 +687,12 @@ latent_cor = function(dataSrc, item_property, predicate=NULL, nDraws=500, use="c
   
   
   np = max(respData$x$person_id)
-  
   respData = lapply(split(respData$x, respData$x[[item_property]]), get_resp_data)
   models = lapply(respData, fit_enorm)
   abl = mapply(ability, respData, models, SIMPLIFY=FALSE,
                MoreArgs = list(method="EAP", prior="Jeffreys",standard_errors=FALSE))
   
-  pgb$tick(2*nd)
+  pb$tick(2*nd)
   
   # some matrices
   # we cannot rely on order in ability so this is the way for now
@@ -718,8 +715,7 @@ latent_cor = function(dataSrc, item_property, predicate=NULL, nDraws=500, use="c
     mean_pv[i] = mean(pvs$PV1)
     pv[pvs$person_id,i] = pvs$PV1
   }
-  
-  pgb$tick(2*nd)
+  pb$tick(2*nd)
   
   for (i in 1:(nd-1))
   {
@@ -758,17 +754,19 @@ latent_cor = function(dataSrc, item_property, predicate=NULL, nDraws=500, use="c
     }
     
     
-    prior = try({update_MVNprior(pv,prior$Sigma)})
+    prior = update_MVNprior(pv,prior$Sigma)
 
     if (i %in% which.keep){
       store[tel,] = as.vector(cov2cor(prior$Sigma))
       tel=tel+1
     }
-    pgb$tick()
+    pb$tick()
   }
-  out_sd=matrix(apply(store,2,sd),nd,nd)
+  out_sd = matrix(apply(store,2,sd),nd,nd)
   diag(out_sd)=0
-  out_cor = matrix(colMeans(store),nd,nd)
+  pd = t(apply(store,2,hpdens, conf=hpd))
+  res = list(cor = matrix(colMeans(store),nd,nd), sd = out_sd,
+             hpd_l = matrix(pd[,1], nd, nd), hpd_h = matrix(pd[,2], nd, nd))
 
-  return(list(cor = out_cor, sd=out_sd))
+  lapply(res, function(x){colnames(x) = rownames(x) = names(models); x})
 }

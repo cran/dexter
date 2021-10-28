@@ -235,18 +235,19 @@ keys_to_rules = function(keys, include_NA_rule = FALSE)
 
 #' Add or modify scoring rules
 #' 
-#' Having to alter or add a scoring rule is occasionally necessary, e.g. in case of a key error. 
+#' It is occasionally necessary to alter or add a scoring rule, e.g. in case of a key error. 
 #' This function offers the possibility to do so and also allows you to add new items to your project
 #' 
 #' @param db a connection to a dexter project database
 #' @param rules A data frame with columns \code{item_id}, \code{response}, and \code{item_score}.
 #' The order is not important but spelling is. Any other columns will be ignored. See details
-#' @return If the scoring rules pass a sanity check, a small summary of changes is printed and nothing is returned
+#' @return If the scoring rules pass a sanity check, a small summary of changes is printed and nothing is returned.
 #' Otherwise this function returns a data frame listing the problems found, with 4 columns:
-#' item_id: id of the problematic item
-#' less_than_two_scores: if TRUE, the item has only one distinct score
-#' duplicated_responses: if TRUE, the item contains two or more identical response categories
-#' min_score_not_zero: if TRUE, the minimum score of the item was not 0
+#' \describe{
+#' \item{item_id}{id of the problematic item}
+#' \item{less_than_two_scores}{if TRUE, the item has only one distinct score}
+#' \item{duplicated_responses}{if TRUE, the item contains two or more identical response categories}
+#' \item{min_score_not_zero}{if TRUE, the minimum score of the item was not 0}}
 #' @details 
 #' The rules should contain all rules that you want to change or add. This means that in case of a key error
 #' in a single multiple choice question, you typically have to change two rules.
@@ -841,11 +842,24 @@ get_rules = function(db)
 #'
 #' @param db a connection to a dexter database, i.e. the output of \code{start_new_project}
 #' or \code{open_project}
-#' @return A data frame with columns: booklet_id, n_persons and n_items.
+#' @return A data frame with columns: booklet_id, n_persons, n_items and booklet_max_score. 
+#' booklet_max_score gives the maximum theoretically possible score according to the scoring rules
 #'
 get_booklets = function(db) {
-  dbGetQuery(db, 'SELECT dxbooklets.*, n_items, n_persons FROM dxbooklets 
-                    INNER JOIN dxbooklet_stats USING(booklet_id) ORDER BY booklet_id; ')
+  bk = dbGetQuery(db, 'SELECT dxbooklets.*, n_items, n_persons FROM dxbooklets 
+                        INNER JOIN dxbooklet_stats USING(booklet_id) ORDER BY booklet_id;')
+  if(!'booklet_max_score' %in% colnames(bk))
+  {
+    ms = dbGetQuery(db,
+      "WITH I AS (SELECT item_id, MAX(item_score) AS ms
+        FROM dxscoring_rules GROUP BY item_id)
+      
+      SELECT booklet_id, SUM(ms) AS booklet_max_score
+        FROM dxbooklet_design INNER JOIN I USING(item_id)
+          GROUP BY booklet_id;")
+    bk = inner_join(bk,ms,by='booklet_id')
+  }
+  bk
 }
 
 

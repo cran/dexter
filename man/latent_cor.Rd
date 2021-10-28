@@ -9,22 +9,30 @@ latent_cor(
   item_property,
   predicate = NULL,
   nDraws = 500,
+  hpd = 0.95,
   use = "complete.obs"
 )
 }
 \arguments{
-\item{dataSrc}{a connection to a dexter database or a data.frame with columns: person_id, item_id, item_score}
+\item{dataSrc}{A connection to a dexter database or a data.frame with columns: person_id, item_id, item_score and 
+the item_property}
 
-\item{item_property}{An item property to distinguish the different scales.}
+\item{item_property}{The name of the item property used to define the domains. If \code{dataSrc} is a dexter db then the
+item_property must match a known item property. If datasrc is a data.frame, item_property must be equal to
+ one of its column names.}
 
 \item{predicate}{An optional expression to subset data, if NULL all data is used}
 
 \item{nDraws}{Number of draws for plausible values}
 
-\item{use}{only complete.obs at this time. Respondents who don't have a score for one or more scales are removed.}
+\item{hpd}{width of Bayesian highest posterior density interval around the correlations, 
+value must be between 0 and 1.}
+
+\item{use}{Only complete.obs at this time. Respondents who don't have a score for one or more scales are removed.}
 }
 \value{
-List containing a correlation matrix and corresponding standard deviations
+List containing a estimated correlation matrix, the corresponding standard deviations, 
+and the lower and upper limits of the highest posterior density interval
 }
 \description{
 Estimates correlations between latent traits. Use an item_property to distinguish the different scales. 

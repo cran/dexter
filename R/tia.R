@@ -10,15 +10,20 @@
 #' @param dataSrc a connection to a dexter database, a matrix, or a data.frame with columns: person_id, item_id, item_score
 #' @param predicate An optional expression to subset data, if NULL all data is used
 #' @param type How to present the item level statistics: \code{raw} for each test booklet 
-#' separately, \code{averaged} averaged over the test booklet in which the item is included,
+#' separately, \code{averaged} booklets are ignored, with the exception of rit and rir which are averaged over the test booklets,
 #' with the number of persons as weights, or \code{compared}, in which case the pvalues, 
 #' correlations with the sum score (rit), and correlations with the rest score (rit) are 
 #' shown in separate tables and compared across booklets
-#' @param max_scores use the observed maximum item score or the theoretical maximum items score 
+#' @param max_scores use the observed maximum item score or the theoretical maximum item score 
 #' according to the scoring rules in the database to compute pvalues and maximum scores
 #' @return A list containing:
 #' \item{booklets}{a data.frame of statistics at booklet level} 
 #' \item{items}{a data.frame (or list if type='compared') of statistics at item level}
+#'
+#' @details 
+#' The returned list also contains the elements 'testStats' and 'itemStats'. These contain the same information
+#' as 'booklets' and 'items' but using obsolete (mixed camelCase and snake_case) variable names. These will
+#' be removed in the future and users are advised to not use these in newer code.
 #'
 tia_tables = function(dataSrc, predicate = NULL, type=c('raw','averaged','compared'),
                       max_scores = c('observed','theoretical')) 
@@ -59,8 +64,8 @@ tia_tables = function(dataSrc, predicate = NULL, type=c('raw','averaged','compar
     itemStats = ti %>% 
       group_by(.data$item_id) %>%
       summarise( nBooklets=n(),
-                 meanScore=weighted.mean(.data$meanScore, w=.data$n),
-                 sdScore=weighted.mean(.data$sdScore, w=.data$n),
+                 w_meanScore=weighted.mean(.data$meanScore, w=.data$n),
+                 sdScore = sqrt(combined_var(.data$meanScore, .data$sdScore^2, .data$n)),
                  maxScore = max(.data$maxScore),
                  pvalue=weighted.mean(.data$pvalue, w=.data$n),
                  rit=weighted.mean(.data$rit, w=.data$n, na.rm=TRUE),
@@ -68,6 +73,7 @@ tia_tables = function(dataSrc, predicate = NULL, type=c('raw','averaged','compar
                  n=sum(.data$n)) %>%
       ungroup() %>%
       mutate_if(is.factor, as.character) %>%
+      rename(meanScore=.data$w_meanScore) %>%
       df_format()
   } else
   {
@@ -108,8 +114,20 @@ tia_tables = function(dataSrc, predicate = NULL, type=c('raw','averaged','compar
                     mean_rit=.data$meanRit, mean_rir=.data$meanRir, 
                     max_booklet_score=.data$maxTestScore, n_persons=.data$N)
   
-  items = rename(itemStats, mean_score = .data$meanScore,
+  if(type == 'raw')
+  {
+    items = rename(itemStats, mean_score = .data$meanScore,
                  sd_score=.data$sdScore, max_score=.data$maxScore, n_persons=.data$n)
+  } else if(type == 'averaged')
+  {
+    items = rename(itemStats, mean_score = .data$meanScore,
+                   sd_score=.data$sdScore, max_score=.data$maxScore, n_persons=.data$n,
+                   n_booklets = .data$nBooklets)
+  } else
+  {
+    items = itemStats
+  }
+  
   
   list(booklets=booklets,items=items,itemStats=itemStats, testStats=testStats)
 }
