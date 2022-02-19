@@ -74,34 +74,47 @@ DIF = function(dataSrc, person_property, predicate=NULL)
   
   if(is_db(dataSrc))
     person_property = tolower(person_property)
-
+  
   pb = get_prog_bar(retrieve_data = is_db(dataSrc))
   on.exit({pb$close()})
   
+  ## 1. get data
   respData = get_resp_data(dataSrc, qtpredicate, extra_columns = person_property, env = env) 
-
+  
   respData$x[[person_property]] = ffactor(as.character(respData$x[[person_property]]))
   
   if(nlevels(respData$x[[person_property]]) != 2)
     stop('The person_property needs to have two unique values in your data to calculate DIF')
   
   
-  problems = unequal_categories(respData, person_property)
-
-  if(length(problems)>0)
-  {
-    message('items removed:')
-    print(as.character(problems))
-    warning('Some items do not have the same score categories over both person_properties and\n',
-            'have been removed from the analysis',call.=FALSE)
-    
-    respData = respData %>%
-      anti_join(tibble(item_id=problems), by='item_id', .recompute_sumscores = TRUE)
-  }
-  
   ## 2. Estimate models with fit_enorm using CML
   models = by(respData, person_property, fit_enorm)
-
+  
+  ## 3. get the intersection
+  common_items = models[[1]]$inputs$ssIS %>%
+    full_join(models[[2]]$inputs$ssIS, by=c('item_id','item_score') ,suffix=c('_1','_2')) %>%
+    group_by(.data$item_id) %>%
+    filter(!(anyNA(.data$sufI_1) | anyNA(.data$sufI_2))) %>%
+    ungroup() %>%
+    distinct(.data$item_id)
+  
+  if(nrow(common_items) != nrow(models[[1]]$inputs$ssI) || nrow(common_items) != nrow(models[[2]]$inputs$ssI))
+  {
+    cat('\n')
+    message('Some items were excluded because they do not appear in both datasets and/or do not have the same score categories in both datasets.')
+    models = lapply(models, function(m){
+      ii = m$inputs$ssIS %>%
+        filter(.data$item_score > 0L) %>%
+        mutate(i = row_number()) %>%
+        semi_join(common_items, by='item_id') %>%
+        pull(.data$i)
+        
+      m$est$beta = drop(m$est$beta)[ii]
+      m$est$acov.beta = m$est$acov.beta[ii,ii]
+      return(m)
+    })
+  }
+  
   
   ## 4. Call overallDIF_ and PairDIF_
   DIF_stats = OverallDIF_ (models[[1]]$est$beta, models[[2]]$est$beta, 
@@ -111,18 +124,21 @@ DIF = function(dataSrc, person_property, predicate=NULL)
                       models[[1]]$est$acov.beta, models[[2]]$est$acov.beta)
   
   items = models[[1]]$inputs$ssIS %>%
+    semi_join(common_items,by='item_id') %>%
     filter(.data$item_score > 0) %>%
     select(.data$item_id, .data$item_score) %>%
     arrange(.data$item_id, .data$item_score) %>%
     mutate(item_id=as.character(.data$item_id))
   
-
+  
   ## 5. Report D and DIF_stats and inputs
   ou = list(DIF_overall = DIF_stats, DIF_pair = DIF_mats$D, Delta_R = DIF_mats$Delta_R, 
             group_labels = names(models), items = items)
   class(ou) = append('DIF_stats', class(ou))
   return(ou)
 }
+
+
 
 
 print.DIF_stats <- function(x, ...)
@@ -154,7 +170,7 @@ print.DIF_stats <- function(x, ...)
 #' @details
 #' Plotting produces an image of the matrix of pairwise DIF statistics. 
 #' The statistics are standard normal deviates and colored to distinguish significant from non-significant values.
-#' If there is no DIF, a proportion alpha will be significant be change.
+#' If there is no DIF, a proportion alpha off the cells will be colored significant by chance alone.
 #'      
 plot.DIF_stats = function(x, items = NULL, itemsX = items, itemsY = items, alpha =.05,...)
 {
@@ -200,7 +216,7 @@ plot.DIF_stats = function(x, items = NULL, itemsX = items, itemsY = items, alpha
   oldpar = par(no.readonly = TRUE)
   on.exit({par(oldpar)},add=TRUE)
   
-  graphics::layout(matrix(data=c(1,2), nrow=1, ncol=2), widths=c(9,2), heights=c(1,1))
+  graphics::layout(matrix(c(1,1,2,0),2,2), widths=c(7,1))
   
   qn = qnorm(1-alpha/2)
   
@@ -222,30 +238,87 @@ plot.DIF_stats = function(x, items = NULL, itemsX = items, itemsY = items, alpha
   # Data Map
   par(mar = c(6,8,2.5,2))
   
-  
+  user.args = list(...)
   do.call(image,
-          merge_arglists(list(...),
+          merge_arglists(user.args,
                          override = list(x = 1:length(yLabels), y = 1:length(xLabels), z=t( DIF_pair),
                                          col=col,breaks=breaks),
                          default = default.args))
   
-  
-  axis(1, at=1:length(yLabels), labels=yLabels, las=3, cex.axis=0.6, hadj=1,padj=0.5)
-  axis(2, at=1:length(xLabels), labels=xLabels, las=1, cex.axis=0.6, hadj=1,padj=0.5)
+  cex.axis = c(user.args$cex.axis, 0.6)[1]
+  axis(1, at=1:length(yLabels), labels=yLabels, las=3, cex.axis=cex.axis, hadj=1,padj=0.5)
+  axis(2, at=1:length(xLabels), labels=xLabels, las=1, cex.axis=cex.axis, hadj=1,padj=0.5)
   
   #Color Scale
   try({
-    par(mar=c(6,2.5,2,2))
+    par(mar=c(2,2,2.5,2))
     image(1, seq(0, max(qn,min(20,max_)), by=.05),
           matrix(seq(0, max(qn,min(20,max_)), by=.05),nrow=1),
           col=col,
           breaks=breaks,
           xlab="",ylab="",
           xaxt="n", axes=FALSE)
-    axis(2, at=0:min(20,max_),lwd=0,lwd.ticks=1,las=2)
-    graphics::layout(1)
+    axis(2, at=0:min(20,max_),lwd=0,lwd.ticks=1,las=2,cex.axis=0.8)
+    
   }, silent=TRUE)
   
-  
+  graphics::layout(1)
   invisible(NULL)
 }
+
+
+
+
+# DIF_heatmap = function(x, items = NULL, itemsX = items, itemsY = items, alpha =.05,...)
+# {
+#   if(is.null(itemsX)) itemsX = sort(unique(x$items$item_id))
+#   if(is.null(itemsY)) itemsY = sort(unique(x$items$item_id))
+#   
+#   if(length(setdiff(c(itemsX, itemsY), x$items$item_id)) > 0)
+#   {
+#     cat('items not found in DIF object:\n')
+#     print(setdiff(c(itemsX, itemsY), x$items))
+#     stop('some of the item_ids you specified are not present in the DIF object')
+#   }
+#   
+#   x$items = x$items %>%
+#     mutate(rn = row_number())
+#   
+#   itemsX = x$items %>%
+#     inner_join(tibble(item_id = itemsX, ord = 1:length(itemsX)), by='item_id') %>%
+#     arrange(.data$ord)
+#   
+#   itemsY = x$items %>%
+#     inner_join(tibble(item_id = itemsY, ord = 1:length(itemsY)), by='item_id') %>%
+#     arrange(.data$ord)
+#   
+#   DIF_pair = abs(x$DIF_pair[itemsX$rn, itemsY$rn])
+#   
+#   
+#   if(nrow(distinct(x$items,.data$item_id)) == nrow(x$items))
+#   {
+#     yLabels = pull(itemsY, 'item_id')
+#     xLabels = pull(itemsX, 'item_id')
+#   } else
+#   {
+#     yLabels = paste(itemsY$item_id, itemsY$item_score)
+#     xLabels = paste(itemsX$item_id, itemsX$item_score)
+#   }
+#   
+#   dimnames(DIF_pair) = list(xLabels, yLabels)
+#   max_ = max(x$DIF_pair)
+#   qn = qnorm(1-alpha/2)
+#   breaks = seq(0, qn, length=50)
+#   col = colorRampPalette(c('white','lightblue'))(length(breaks)-1)
+#   if(max_ > qn)
+#   {
+#     breaks_b = seq(qn+0.01, max_, length=50)
+#     col = c(col,colorRampPalette(c('gold1','red2'))(length(breaks_b)))
+#     breaks = c(breaks, breaks_b)
+#   }
+#   
+#   pheatmap::pheatmap(DIF_pair, colors=col, breaks=breaks, ...)  
+#   
+#   
+#   invisible(NULL)
+# }

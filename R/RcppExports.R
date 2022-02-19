@@ -21,10 +21,6 @@ ds_connected_groups <- function(a) {
     .Call(`_dexter_ds_connected_groups`, a)
 }
 
-unequal_categories_C <- function(group_id, item_id, item_score, nit, max_score) {
-    .Call(`_dexter_unequal_categories_C`, group_id, item_id, item_score, nit, max_score)
-}
-
 make_booklets <- function(person_id, item_id, item_score, booklet_id, booklet_score, merged) {
     .Call(`_dexter_make_booklets`, person_id, item_id, item_score, booklet_id, booklet_score, merged)
 }
@@ -155,6 +151,10 @@ escore_wle <- function(theta, b, a, first, last, nI, max_a) {
 
 theta_wle_sec <- function(b, a, first, last) {
     .Call(`_dexter_theta_wle_sec`, b, a, first, last)
+}
+
+theta_EAP_GH_c <- function(p_score, theta, weights) {
+    .Call(`_dexter_theta_EAP_GH_c`, p_score, theta, weights)
 }
 
 IJ_c <- function(theta, b, a, first, last, I, J, logFi) {

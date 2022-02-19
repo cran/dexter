@@ -71,21 +71,6 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
-// unequal_categories_C
-std::vector<int> unequal_categories_C(const IntegerVector& group_id, const IntegerVector& item_id, const IntegerVector& item_score, const int nit, const int max_score);
-RcppExport SEXP _dexter_unequal_categories_C(SEXP group_idSEXP, SEXP item_idSEXP, SEXP item_scoreSEXP, SEXP nitSEXP, SEXP max_scoreSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< const IntegerVector& >::type group_id(group_idSEXP);
-    Rcpp::traits::input_parameter< const IntegerVector& >::type item_id(item_idSEXP);
-    Rcpp::traits::input_parameter< const IntegerVector& >::type item_score(item_scoreSEXP);
-    Rcpp::traits::input_parameter< const int >::type nit(nitSEXP);
-    Rcpp::traits::input_parameter< const int >::type max_score(max_scoreSEXP);
-    rcpp_result_gen = Rcpp::wrap(unequal_categories_C(group_id, item_id, item_score, nit, max_score));
-    return rcpp_result_gen;
-END_RCPP
-}
 // make_booklets
 List make_booklets(const IntegerVector& person_id, const IntegerVector& item_id, const IntegerVector& item_score, IntegerVector& booklet_id, IntegerVector& booklet_score, const bool merged);
 RcppExport SEXP _dexter_make_booklets(SEXP person_idSEXP, SEXP item_idSEXP, SEXP item_scoreSEXP, SEXP booklet_idSEXP, SEXP booklet_scoreSEXP, SEXP mergedSEXP) {
@@ -612,6 +597,19 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// theta_EAP_GH_c
+Rcpp::List theta_EAP_GH_c(const arma::mat& p_score, const arma::vec& theta, const arma::vec& weights);
+RcppExport SEXP _dexter_theta_EAP_GH_c(SEXP p_scoreSEXP, SEXP thetaSEXP, SEXP weightsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const arma::mat& >::type p_score(p_scoreSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type theta(thetaSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type weights(weightsSEXP);
+    rcpp_result_gen = Rcpp::wrap(theta_EAP_GH_c(p_score, theta, weights));
+    return rcpp_result_gen;
+END_RCPP
+}
 // IJ_c
 void IJ_c(const arma::vec& theta, const arma::vec& b, const arma::ivec& a, const arma::ivec& first, const arma::ivec& last, arma::mat& I, arma::mat& J, arma::vec& logFi);
 RcppExport SEXP _dexter_IJ_c(SEXP thetaSEXP, SEXP bSEXP, SEXP aSEXP, SEXP firstSEXP, SEXP lastSEXP, SEXP ISEXP, SEXP JSEXP, SEXP logFiSEXP) {
@@ -712,7 +710,6 @@ static const R_CallMethodDef CallEntries[] = {
     {"_dexter_ppoint", (DL_FUNC) &_dexter_ppoint, 1},
     {"_dexter_fill_resp_matrix", (DL_FUNC) &_dexter_fill_resp_matrix, 4},
     {"_dexter_ds_connected_groups", (DL_FUNC) &_dexter_ds_connected_groups, 1},
-    {"_dexter_unequal_categories_C", (DL_FUNC) &_dexter_unequal_categories_C, 5},
     {"_dexter_make_booklets", (DL_FUNC) &_dexter_make_booklets, 6},
     {"_dexter_make_booklets_summed", (DL_FUNC) &_dexter_make_booklets_summed, 5},
     {"_dexter_make_booklets_summed_matrix", (DL_FUNC) &_dexter_make_booklets_summed_matrix, 3},
@@ -746,6 +743,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_dexter_theta_mle_sec", (DL_FUNC) &_dexter_theta_mle_sec, 4},
     {"_dexter_escore_wle", (DL_FUNC) &_dexter_escore_wle, 7},
     {"_dexter_theta_wle_sec", (DL_FUNC) &_dexter_theta_wle_sec, 4},
+    {"_dexter_theta_EAP_GH_c", (DL_FUNC) &_dexter_theta_EAP_GH_c, 3},
     {"_dexter_IJ_c", (DL_FUNC) &_dexter_IJ_c, 8},
     {"_dexter_PVrecycle", (DL_FUNC) &_dexter_PVrecycle, 9},
     {"_dexter_PV_sve", (DL_FUNC) &_dexter_PV_sve, 12},

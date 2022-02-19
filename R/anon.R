@@ -87,17 +87,32 @@ theta_score_distribution = function(b,a,first,last,scoretab)
   return(theta)
 }
 
+# exp(score*tht) is liable to get infinite
+# g is largish so only compounds the problem
+# p has cols theta and rows scores
+
 
 # Expected distribution given a vector theta
 # return matrix, ncol=length(theta), nrow=nscores
+# old
+# pscore = function(theta, b, a, first, last)
+# {
+#   g = elsym(b, a, first, last)
+#   score = 0:(length(g)-1)
+#   
+#   p = sapply(theta, function(tht) g * exp(score*tht))
+#   sweep(p,2,colSums(p),`/`)
+# }
+
 pscore = function(theta, b, a, first, last)
 {
   g = elsym(b, a, first, last)
   score = 0:(length(g)-1)
+  p = sapply(theta, function(tht) log(g) + score*tht)
   
-  p = sapply(theta, function(tht) g * exp(score*tht))
-  sweep(p,2,colSums(p),`/`)
+  exp(sweep(p,2,apply(p,2,logsumexp),`-`))
 }
+
 
 # vector of 0,1 indicating if a score is possible. element 1 is score 0
 possible_scores = function(a, first, last)
@@ -160,6 +175,16 @@ theta_jEAP = function(b, a, first,last, se=FALSE, grid_from=-6, grid_to=6, grid_
 
 
 
+# se is always returned (arg se is ignored)
+theta_EAP_GH = function(b, a, first,last, se=TRUE, mu=0, sigma=4)
+{
+  nodes = quadpoints$nodes * sigma + mu
+  weights = quadpoints$weights
+  ps = t(pscore(nodes,b,a,first,last))
+  theta_EAP_GH_c(ps,nodes,weights)
+}
+
+
 ##### EAP based on npv (default 500) plausible values ####
 # Uses recycling to get npv plausible values for each sum score.
 # Options:
@@ -181,32 +206,29 @@ theta_jEAP = function(b, a, first,last, se=FALSE, grid_from=-6, grid_to=6, grid_
 # The final argument allows EAPs based on A-weighted score, where A need not equal a.
 ####
 
-  
-
-theta_EAP = function(b, a, first, last, npv=500, mu=0, sigma=4, smooth=FALSE, se=FALSE, A=NULL)
-{
-  if(is.null(A)) A=a
-  
-  mx = sum(A[last])
-  score = (0:mx)[as.logical(possible_scores(A,first,last))]
-  tmp = pv_recycle(b,a,first,last,score,npv,mu,sigma,A=A)
-  
-  theta = rep(NA,(mx+1))
-  theta[score+1]=rowMeans(tmp)
-  
-  # @Timo: ik denk niet dat smooth goed werkt als er NA scores zijn
-  # misschien gewoon alleen een vector voor de bestaande scores gebruiken?
-  if (smooth) 
-  {
-      score = 0:mx
-      theta = predict(lm(theta ~ poly(score,7)))
-  }
-  sem=rep(NA,(mx+1))
-
-  if (se) sem=apply(tmp,1,sd)
-  return(list(theta=theta, se=sem))
-}
-
+# theta_EAP = function(b, a, first, last, npv=500, mu=0, sigma=4, smooth=FALSE, se=FALSE, A=NULL)
+# {
+#   if(is.null(A)) A=a
+#   
+#   mx = sum(A[last])
+#   score = (0:mx)[as.logical(possible_scores(A,first,last))]
+#   tmp = pv_recycle(b,a,first,last,score,npv,mu,sigma,A=A)
+#   
+#   theta = rep(NA,(mx+1))
+#   theta[score+1]=rowMeans(tmp)
+#   
+#   # @Timo: ik denk niet dat smooth goed werkt als er NA scores zijn
+#   # misschien gewoon alleen een vector voor de bestaande scores gebruiken?
+#   if (smooth) 
+#   {
+#       score = 0:mx
+#       theta = predict(lm(theta ~ poly(score,7)))
+#   }
+#   sem=rep(NA,(mx+1))
+# 
+#   if (se) sem=apply(tmp,1,sd)
+#   return(list(theta=theta, se=sem))
+# }
 
 
 

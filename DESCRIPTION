@@ -1,7 +1,7 @@
 Package: dexter
 Type: Package
 Title: Data Management and Analysis of Tests
-Version: 1.1.4
+Version: 1.1.5
 Authors@R: c(
     person("Gunter","Maris", role="aut"),
     person("Timo","Bechger", role="aut"),
@@ -23,10 +23,10 @@ RoxygenNote: 7.1.2
 Suggests: knitr, rmarkdown, latticeExtra, testthat, ggplot2, Cairo
 VignetteBuilder: knitr
 NeedsCompilation: yes
-Packaged: 2021-10-27 09:53:45 UTC; jessek
+Packaged: 2022-02-19 06:17:48 UTC; jessek
 Author: Gunter Maris [aut],
   Timo Bechger [aut],
   Jesse Koops [aut, cre],
   Ivailo Partchev [aut]
 Repository: CRAN
-Date/Publication: 2021-10-28 13:30:14 UTC
+Date/Publication: 2022-02-19 12:10:07 UTC
