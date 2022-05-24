@@ -97,6 +97,14 @@ distractor_plot = function(dataSrc, item_id, predicate=NULL, legend=TRUE, curtai
   check_string(item_id)
   item = item_id
   
+  user.args = list(...); leg.args = list()
+  if(length(names(user.args))>0)
+  {
+    leg.args = user.args[endsWith(names(user.args),'.legend')]
+    names(leg.args) = gsub('\\.legend$','',names(leg.args))
+    user.args = user.args[!endsWith(names(user.args),'.legend')]
+  }
+  
   iprop = list()
   if(is_db(dataSrc))
     iprop = as.list(dbGetQuery_param(dataSrc,'SELECT * FROM dxItems WHERE item_id= :item;', 
@@ -149,9 +157,7 @@ distractor_plot = function(dataSrc, item_id, predicate=NULL, legend=TRUE, curtai
                              '$item_id, pos. $item_position in booklet $booklet_id',
                              '$item_id in booklet $booklet_id')
   
-  user.args = list(...)
-  
-  
+
   rsp_counts = respData$x %>%
     count(.data$booklet_id, .data$response, .data$item_score, .data$booklet_score)
 
@@ -230,8 +236,10 @@ distractor_plot = function(dataSrc, item_id, predicate=NULL, legend=TRUE, curtai
       
       if(legend && NROW(lgnd)>0)
       {
-        graphics::legend("topleft", legend = lgnd$label, inset=c(0.01, 0),
-                         lty = 1, col = lgnd$col, cex = 0.8,lwd=2, box.lty = 0)
+        do.call(graphics::legend,
+                merge_arglists(leg.args, 
+                               default=list(x="topleft", cex=.8, box.lty=0, bg='white',lwd=2,inset=c(0.01, 0)),
+                               override=list(legend=lgnd$label,lty=1, col=lgnd$col)))
       }
     }
   })
@@ -239,19 +247,59 @@ distractor_plot = function(dataSrc, item_id, predicate=NULL, legend=TRUE, curtai
   invisible(df_format(rsp_colors))
 }
 
+# pp_segments = function(maxA, maxB, psbl, col='lightgray',cex=0.6)
+# {
+#   clip(0,maxA,0,maxB) 
+#   segments(0L, psbl, psbl, 0L, col=col, xpd=FALSE)
+#   h = strheight('1',cex=cex)
+# 
+#   y = par('usr')[3] + h/2
+#   psblx = psbl[psbl<=maxA]
+#   text(psblx - y, y, psblx, cex=.6,col=col, xpd=TRUE,adj=c(0.4,0.4))
+#   
+#   psbly = psbl[psbl>maxA]
+#   text(maxA - y,psbly-maxA+y, psbly,col=col,xpd=TRUE,cex=cex)
+# }
+adjust_pp_scores = function(maxA, psbl,cex)
+{
+  w = max(strwidth(maxA,cex=cex), strheight('1',cex=cex)) + 0.05
+  
+  if(w>=1)
+  {
+    lag = psbl[1]
+    for(i in 2:length(psbl))
+    {
+      if(psbl[i]-lag<w)
+      {
+        psbl[i] = NA_integer_
+      } else
+      {
+        lag = psbl[i]
+      }
+    }
+  }
+  psbl[!is.na(psbl)]
+}
+
 pp_segments = function(maxA, maxB, psbl, col='lightgray',cex=0.6)
 {
+  psbl = adjust_pp_scores(maxA,psbl,cex)
+  
   clip(0,maxA,0,maxB) 
   segments(0L, psbl, psbl, 0L, col=col, xpd=FALSE)
+  
   h = strheight('1',cex=cex)
-
-  y = par('usr')[3] + h/2
+  
+  y = par('usr')[3] + h
   psblx = psbl[psbl<=maxA]
-  text(psblx - y, y, psblx, cex=.6,col=col, xpd=TRUE,adj=c(0.4,0.4))
+  
+  text(psblx, y, psblx, cex=cex,col=col, xpd=TRUE,pos=4,offset=0)
   
   psbly = psbl[psbl>maxA]
-  text(maxA - y,psbly-maxA+y, psbly,col=col,xpd=TRUE,cex=cex)
+  text(maxA ,psbly-maxA+y, psbly,col=col,xpd=TRUE,cex=cex,pos=4,offset=0)
+  
 }
+
 
 #' Profile plot
 #'
@@ -268,6 +316,7 @@ pp_segments = function(maxA, maxB, psbl, col='lightgray',cex=0.6)
 #' the data better or at least as good as the Rasch model.
 #' @param x Which value of the item_property to draw on the x axis, if NULL, one is chosen automatically
 #' @param col vector of colors to use for plotting
+#' @param col.diagonal color of the diagonal lines representing the testscores
 #' @param ... further arguments to plot
 #' @details 
 #' Profile plots can be used to investigate whether two (or more) groups of respondents 
@@ -294,7 +343,8 @@ pp_segments = function(maxA, maxB, psbl, col='lightgray',cex=0.6)
 #' close_project(db)
 #' 
 #' 
-profile_plot = function(dataSrc, item_property, covariate, predicate = NULL, model = c("IM","RM"), x = NULL, col = NULL, ...) 
+profile_plot = function(dataSrc, item_property, covariate, predicate = NULL, model = c("IM","RM"), x = NULL, 
+                        col = NULL, col.diagonal='lightgray',...) 
 {
   check_dataSrc(dataSrc)
   check_string(item_property)
@@ -385,8 +435,8 @@ profile_plot = function(dataSrc, item_property, covariate, predicate = NULL, mod
                          default=default.args,
                          override=list(x=c(0,maxA), y=c(0,maxB),type="n")))
   
-  pp_segments(maxA,maxB,psbl)
-  
+  seg.cex = 0.6 * ifelse('cex' %in% names(user.args), user.args$cex, 1)
+  pp_segments(maxA,maxB,psbl,cex=seg.cex, col=col.diagonal)
   
   colors = qcolors(length(tt), col)
   
@@ -409,7 +459,7 @@ profile_plot = function(dataSrc, item_property, covariate, predicate = NULL, mod
 
   do.call(legend,
           merge_arglists(leg.args, 
-                         default=list(x="topleft", cex=.7, box.lty=0, bg='white'),
+                         default=list(x="topleft", cex=.7, box.lty=0, bg='white',inset=0.01),
                          override=list(legend=names(tt),lty=1, col=colors)))
 
   invisible(NULL)
