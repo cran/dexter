@@ -5,7 +5,7 @@ get_sufStats_nrm = function(respData, check_sanity=TRUE)
 {
   mx = max(respData$x$item_score)
   if(is.na(mx))
-    stop('there is a problem with your response data or database')
+    stop_('there is a problem with your response data or database')
   
   design = respData$design
   
@@ -13,10 +13,10 @@ get_sufStats_nrm = function(respData, check_sanity=TRUE)
   if(check_sanity)
   {
     if(nrow(design) == 1) 
-      stop('There are responses to only one item in your selection, this cannot be calibrated.') 
+      stop_('There are responses to only one item in your selection, this cannot be calibrated.') 
     
     if(!is_connected(design))
-      stop('Your design is not connected')   
+      stop_('Your design is not connected')   
   }
   
   #if this happens to be more than the number of distinct items it does not matter much
@@ -58,7 +58,7 @@ get_sufStats_nrm = function(respData, check_sanity=TRUE)
       err = TRUE
     }
     if(err)
-      stop('Some items have only one response category or lack a zero score category',call.=FALSE)
+      stop_('Some items have only one response category or lack a zero score category')
   }
   sufs$ssI = ssI
   
@@ -166,5 +166,6 @@ get_sufStats_tia = function(respData)
   tia_C(respData$x$booklet_id, respData$x$booklet_score, respData$x$item_id, respData$x$item_score, 
         nb, nit,
         frst_item, respData$design$booklet_id, respData$design$item_id ) 
+
 }
 

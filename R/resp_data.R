@@ -57,7 +57,7 @@ stop_no_param = function(items)
 #' \item{get_resp_data}{ returns a list with class `dx_resp_data` with elements
 #' \describe{
 #' \item{x}{
-#' when summarised is FALSE, a tibble(person_id, booklet_id, item_id, item_score, booklet_score [, extra_columns>]), sorted in such a way that
+#' when summarised is FALSE, a tibble(person_id, booklet_id, item_id, item_score, booklet_score [, extra_columns]), sorted in such a way that
 #'   all rows pertaining to the same person-booklet are together
 #'   
 #' when summarised is TRUE, a tibble(person_id, booklet_id, booklet_score [, extra_columns])}
@@ -85,6 +85,15 @@ get_resp_data = function(dataSrc, qtpredicate=NULL,
     return(resp_data.from_resp_data(dataSrc, extra_columns=extra_columns, summarised=summarised, 
                                     protect_x=protect_x,merge_within_persons = merge_within_persons))
   }
+  if(!is.null(extra_columns))
+  {
+      if(is.matrix(dataSrc)) stop("column(s): ", paste(extra_columns,collapse=','), ' not found.')
+      if(inherits(dataSrc,'data.frame') && ! all(extra_columns %in% colnames(dataSrc)))
+      {
+        stop("column(s): ", paste(setdiff(extra_columns,colnames(dataSrc)),collapse=','), ' not found.')
+      }
+  }
+  
   if(raw)
   {
     x = get_responses_(dataSrc, qtpredicate = qtpredicate, env = env, 

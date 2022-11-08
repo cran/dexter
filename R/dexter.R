@@ -79,19 +79,19 @@ start_new_project = function(rules, db_name="dexter.db", person_properties = NUL
   
   if(NROW(rules)>0)
   {
-	sanity = rules %>%
-		group_by(.data$item_id) %>%
-		summarise(less_than_two_scores = length(unique(.data$item_score))<2,
-				duplicated_responses = any(duplicated(.data$response)),
-				min_score_not_zero = min(.data$item_score)>0) %>%
-		filter(.data$less_than_two_scores | .data$duplicated_responses | .data$min_score_not_zero)
+  	sanity = rules %>%
+  		group_by(.data$item_id) %>%
+  		summarise(less_than_two_scores = n_distinct(.data$item_score)<2,
+  				duplicated_responses = any(duplicated(.data$response)),
+  				min_score_not_zero = min(.data$item_score)>0) %>%
+  		filter(.data$less_than_two_scores | .data$duplicated_responses | .data$min_score_not_zero)
 
     if (nrow(sanity)>0)
-	{
-      message("There were problems with your scoring rules.\nCheck the output below for possible reasons.\n")
-      print(as.data.frame(sanity))
-      stop('Scoring rules are not valid')
-	}
+  	{
+        message("There were problems with your scoring rules.\nCheck the output below for possible reasons.\n")
+        print(as.data.frame(sanity))
+        stop('Scoring rules are not valid')
+  	}
   } 
 
   if (inherits(db_name,'character'))
@@ -385,8 +385,8 @@ touch_rules = function(db, rules)
 #' data.frame in long format with columns \code{person_id}, \code{booklet_id}, 
 #' \code{item_id} and \code{response} such as can usually be found in databases for example. 
 #' For booklets that are not already known in your project, you need to specify the design via the \code{design} argument.
-#' Failure to do so will result in an error. Responses to items that should be there according to the design but which do not have a correpsoning
-#' row in \code{data} will be added with \code{missing_value} used for the response. If this missing value is not defined in your scoring rules and 
+#' Failure to do so will result in an error. Responses to items that should be there according to the design but which do not have a corresponding
+#' row in \code{data} will be added with \code{missing_value} used for the response. If this missing value is not defined in your scoring rules 
 #' and \code{auto_add_unknown_rules} is set to FALSE, this will lead to an error message.
 #' 
 #' 
@@ -464,10 +464,9 @@ add_booklet = function(db, x, booklet_id, auto_add_unknown_rules = FALSE) {
     responses$response = as.character(responses$response)
     responses$response[is.na(responses$response)] = 'NA'
                   
-    
-    existing_rules = dbGetQuery(db, "SELECT item_id, response FROM dxscoring_rules;")
-    rules = responses[,c('item_id', 'response')]
-    new_rules = rules[!duplicated(rbind(existing_rules, rules))[-seq_len(nrow(existing_rules))], ]
+    new_rules = anti_join(responses, dbGetQuery(db, "SELECT item_id, response FROM dxscoring_rules;"), 
+                          by=c('item_id','response')) %>%
+      distinct(.data$item_id, .data$response)
     
     if (nrow(new_rules)>0 && auto_add_unknown_rules) 
     {
@@ -478,7 +477,7 @@ add_booklet = function(db, x, booklet_id, auto_add_unknown_rules = FALSE) {
     } else if(nrow(new_rules)>0) 
     {
       message('The following responses are not in your rules (showing first 30):\n')
-      as.data.frame(new_rules) %>% print(row.names=FALSE)
+      print(head(as.data.frame(new_rules), 30), row.names=FALSE)
       stop('unknown responses')
     }
     dbExecute_param(db,'INSERT INTO dxresponses(booklet_id,person_id,item_id,response) 
@@ -505,11 +504,6 @@ add_booklet = function(db, x, booklet_id, auto_add_unknown_rules = FALSE) {
 
   out
 }
-
-# to do: this update, if accepted, needs an update in dextergui, possibly cowtools
-# what about design for which there is no data?
-# 1. import or not?
-# 2. doe empty booklets mean problems in get_resp_data?
 
 #' @rdname add_booklet 
 add_response_data = function(db, data, design=NULL, missing_value = 'NA', auto_add_unknown_rules = FALSE)
@@ -613,7 +607,7 @@ add_response_data = function(db, data, design=NULL, missing_value = 'NA', auto_a
     invalid_bk_item = anti_join(data_design, design, by=c('booklet_id','item_id'))
     if(NROW(invalid_bk_item) > 0)
     {
-      message('Unknown booklet, item combinations (first 10)')
+      message('Unknown booklet, item combinations (showing first 10)')
       print(head(invalid_bk_item,10))
       stop_('Your data contains booklet,item combinations that should not occur according to the design.')
     }
@@ -654,8 +648,15 @@ add_response_data = function(db, data, design=NULL, missing_value = 'NA', auto_a
         msg = c(msg,sprintf('%i scoring rules with 0 score added to the rules', nrow(new_rules)))
       } else
       {
-        message('Unknown responses (first 10):')
-        print(head(new_rules,10))
+        if(all(new_rules$response == missing_value))
+        {
+          message(sprintf('%i missing responses replaced by "%s", but this value is not known in the scoring rules.\nType ?add_response_data for help.',
+                          NA_cnt, missing_value))
+        } else
+        {
+          message('Unknown responses (showing first 10):')
+          print(head(new_rules,10))
+        }
         stop_("Unknown responses")
       }
     }
@@ -691,141 +692,6 @@ add_response_data = function(db, data, design=NULL, missing_value = 'NA', auto_a
   cat(paste(msg,collapse='\n'))
 }
 
-# add_response_data_old = function(db, data, auto_add_unknown_rules = FALSE, missing_value = 'NA')
-# {
-#   colnames(data) = tolower(colnames(data))
-#   if('item_score' %in% colnames(data) && ( ! 'response' %in% colnames(data)) && is_scored_db(db))
-#   {
-#     message('column `response` not found in data, using `item_score` instead')
-#     data = rename(data, response = 'item_score')
-#   }
-#   
-#   check_df(data, c('item_id', 'person_id', 'response','booklet_id'))
-#   check_db(db)
-# 
-#   data = ungroup(data)
-#   
-#   data$person_id = as.character(data$person_id)
-#   data$item_id = as.character(data$item_id)
-#   data$booklet_id = as.character(data$booklet_id)
-#   data$response = as.character(data$response)
-#   
-#   missing_value = as.character(missing_value)
-#   check_string(missing_value)
-#   
-#   unknown_items = distinct(data, .data$item_id) %>%
-#     anti_join(dbGetQuery(db, 'SELECT DISTINCT item_id FROM dxitems;'), by='item_id')
-#   
-#   if(nrow(unknown_items) > 0)
-#   {
-#     message('The following items are not known in your project:')
-#     print(unknown_items$item_id) 
-#     stop("encountered item_id's not defined in your project")
-#   }
-#   dbTransaction(db,{ 
-#   
-#     
-#     user_booklets = distinct(data, .data$booklet_id)
-#     
-#     known_booklets = user_booklets %>%
-#       inner_join(dbGetQuery(db, 'SELECT booklet_id FROM dxbooklets;'), by='booklet_id')
-#     
-#     unknown_booklets = anti_join(user_booklets, known_booklets, by='booklet_id')
-#     
-#     if(nrow(unknown_booklets) > 0)
-#     {
-#       dbExecute_param(db,'INSERT INTO dxbooklets(booklet_id) VALUES(:booklet_id);',unknown_booklets)
-#       if('item_position' %in% colnames(data))
-#       {
-#         data %>%
-#           distinct(.data$booklet_id, .data$item_id, .data$item_position) %>%
-#           inner_join(unknown_booklets, by='booklet_id') %>%
-#           dbExecute_param(db, 'INSERT INTO dxbooklet_design(booklet_id, item_id, item_position) 
-#                           VALUES(:booklet_id, :item_id, :item_position);', .)
-#       } else
-#       {
-#         data %>%
-#           distinct(.data$booklet_id, .data$item_id) %>%
-#           inner_join(unknown_booklets, by='booklet_id') %>%
-#           group_by(.data$booklet_id) %>%
-#           mutate(item_position = dense_rank(.data$item_id)) %>%
-#           ungroup() %>%
-#           dbExecute_param(db, 'INSERT INTO dxbooklet_design(booklet_id, item_id, item_position) 
-#                           VALUES(:booklet_id, :item_id, :item_position);', .)
-#       } 
-#     }
-# 
-#     design_mismatch = data %>%
-#       distinct(.data$booklet_id, .data$item_id) %>%
-#       inner_join(known_booklets, by='booklet_id') %>%
-#       anti_join(dbGetQuery(db, 'SELECT booklet_id, item_id FROM dxbooklet_design;'), 
-#                 by=c('booklet_id','item_id'))
-#     
-#     if(nrow(design_mismatch) > 0)
-#     {
-#       message('The following booklet_id, item_id combinations are not part of the booklet_design in your project')
-#       design_mismatch %>%
-#         arrange(.data$booklet_id, .data$item_id) %>%
-#         as.data.frame() %>%
-#         print(row.names=FALSE)
-#       stop('design mismatch')
-#       
-#     }
-#     
-#     # fill in missings
-#     persons = distinct(data, .data$person_id)
-#     
-#     new_persons = anti_join(persons, dbGetQuery(db, 'SELECT person_id FROM dxpersons;'), by='person_id')
-#     if(nrow(new_persons) > 0)
-#       dbExecute_param(db, 'INSERT INTO dxpersons(person_id) VALUES(:person_id);', new_persons)
-#     
-#     admin = distinct(data, .data$person_id, .data$booklet_id)
-# 
-#     existing_admin = admin %>%
-#       inner_join(dbGetQuery(db,'SELECT person_id, booklet_id FROM dxadministrations;'), by=c('person_id','booklet_id'))
-# 
-#     if(nrow(existing_admin) > 0)
-#     {
-#       message('The following person-booklet combination have already been entered into the project (showing first 30)')
-#       slice(existing_admin, 1:30) %>% as.data.frame() %>% print(row.names=FALSE)
-#       stop('double administrations')
-#     }
-#     
-#     dbExecute_param(db, 'INSERT INTO dxadministrations(person_id, booklet_id) VALUES(:person_id, :booklet_id);', 
-#                     admin)
-# 
-#     data = admin %>%
-#       inner_join(dbGetQuery(db, 'SELECT booklet_id, item_id FROM dxbooklet_design;'), by='booklet_id') %>%
-#       left_join(data, by=c('person_id','booklet_id','item_id')) %>%
-#       mutate(response = if_else(is.na(.data$response), missing_value, .data$response)) %>%
-#       select(.data$person_id, .data$booklet_id, .data$item_id, .data$response)
-# 
-#     unknown_responses = distinct(data, .data$item_id, .data$response) %>%
-#       anti_join(dbGetQuery(db, 'SELECT DISTINCT item_id, response FROM dxscoring_rules;'), 
-#                 by=c('item_id','response'))
-#     
-#     if(nrow(unknown_responses)>0) 
-#     {
-#       if(auto_add_unknown_rules)
-#       {
-#         dbExecute_param(db,
-#                   'INSERT INTO dxscoring_rules(item_id,response,item_score) VALUES(:item_id,:response,0);',
-#                   unknown_responses)
-#       } else
-#       {
-#         message('The following responses are not defined in your rules (showing first 30):')
-#         slice(unknown_responses, 1:30) %>% as.data.frame() %>% print(row.names=FALSE)
-#         stop('unknown responses')
-#       }
-#     }
-#     
-#     n = dbExecute_param(db, 
-#         'INSERT INTO dxresponses (person_id, booklet_id, item_id, response) 
-#                     VALUES(:person_id, :booklet_id, :item_id, :response);', data)
-#   })
-#   cat(paste(n,'responses imported.\n'))
-#   
-# }
 
 
 #' Add item properties to a project
@@ -1122,10 +988,10 @@ get_items = function(db)
 #'
 get_persons = function(db){
   check_db(db)
-  dbGetQuery(db,'SELECT * FROM dxpersons ORDER BY person_id;')
+  df_format(dbGetQuery(db,'SELECT * FROM dxpersons ORDER BY person_id;'))
 }
 
-#' Provide test scores
+#' Get test scores
 #'
 #' Supplies the sum of item scores for each person selected.
 #'
