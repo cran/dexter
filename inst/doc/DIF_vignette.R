@@ -1,13 +1,15 @@
 ## ----setup, include=FALSE-----------------------------------------------------
 library(knitr)
-opts_chunk$set(echo = TRUE, fig.width=6, fig.height=5)
+opts_chunk$set(echo = TRUE, fig.width=6, fig.height=5, message=FALSE)
 
 if (requireNamespace("Cairo", quietly = TRUE)) 
 {
    opts_chunk$set(dev='CairoPNG')
 }
 
-## ----get_data, results='hide', message=FALSE----------------------------------
+RcppArmadillo::armadillo_throttle_cores(1)
+
+## ----get_data, results='hide'-------------------------------------------------
 library(dexter)
 library(dplyr)
 
@@ -43,6 +45,8 @@ items = get_items(db) %>%
   
 plot(dif_gender, items=items$item_id)
 
-## ---- echo=FALSE, results='hide'----------------------------------------------
+## ----include=FALSE------------------------------------------------------------
 close_project(db)
+
+RcppArmadillo::armadillo_reset_cores()
 

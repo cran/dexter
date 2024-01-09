@@ -1,8 +1,4 @@
 
-
-
-
-##########################################
 #' Fit the extended nominal response model
 #'
 #' Fits an Extended NOminal Response Model (ENORM) using conditional maximum likelihood (CML)
@@ -18,9 +14,9 @@
 #' @param nDraws Number of Gibbs samples when estimation method is Bayes. 
 #' @param merge_within_persons whether to merge different booklets administered to the same person, enabling linking over persons as well as booklets.
 #' @return An object of type \code{prms}. The prms object can be cast to a data.frame of item parameters 
-#' using function `coef` or used directly as input for other Dexter functions.
+#' using function \code{coef} or used directly as input for other Dexter functions.
 #' @details
-#' To support some flexibility in fixing parameters, fixed_params can be a dexter prms object of a data.frame.
+#' To support some flexibility in fixing parameters, fixed_params can be a dexter prms object or a data.frame.
 #' If a data.frame, it should contain the columns item_id, item_score and a difficulty parameter. Three types of parameters are supported:
 #' \describe{
 #' \item{delta/beta}{ thresholds between subsequent item categories }
@@ -109,7 +105,7 @@ fit_enorm_ = function(dataSrc, qtpredicate = NULL, fixed_params = NULL, method=c
       cat(paste('Some score categories are fixed while some are not, for the same item.',
                 'Dexter does not know how to deal with that.\nThe following score categories are missing:\n'))
       missing_cat %>% 
-        select(.data$item_id, .data$item_score) %>%
+        select('item_id', 'item_score') %>%
         arrange(.data$item_id, .data$item_score) %>%
         as.data.frame() %>%
         print()
@@ -173,6 +169,9 @@ fit_enorm_ = function(dataSrc, qtpredicate = NULL, fixed_params = NULL, method=c
 #' @param nbins number of ability groups
 #' @param ci confidence interval for the error bars, between 0 and 1. Use 0 to suppress the error bars.
 #' Default = 0.95 for a 95\% confidence interval
+#' @param add logical; if TRUE add to an already existing plot
+#' @param col color for the observed score average
+#' @param col.model color for the expected score based on the model
 #' @param ... further arguments to plot
 #' @return 
 #' Silently, a data.frame with observed and expected values possibly useful to create a numerical fit measure.
@@ -185,12 +184,12 @@ fit_enorm_ = function(dataSrc, qtpredicate = NULL, fixed_params = NULL, method=c
 #' 
 #' @method plot prms
 #' 
-plot.prms = function(x, item_id=NULL, dataSrc=NULL, predicate=NULL, nbins=5, ci = .95, ...)
+plot.prms = function(x, item_id=NULL, dataSrc=NULL, predicate=NULL, nbins=5, ci = .95, 
+                     add=FALSE, col = 'black', col.model='grey80', ...)
 {
   check_num(nbins,'integer',.length=1, .min=2)
   dots = list(...)
   
-
   if(is.null(item_id))
   {
     if('items' %in% names(dots))
@@ -205,7 +204,7 @@ plot.prms = function(x, item_id=NULL, dataSrc=NULL, predicate=NULL, nbins=5, ci 
   }
   if(length(setdiff(item_id,x$inputs$ssI$item_id))>0)
   {
-    message('The following items were not found in yourfit object')
+    message('The following items were not found in your fit object')
     print(setdiff(item_id,x$inputs$ssI$item_id))
     stop('unknown item',call.=FALSE)
   }
@@ -225,12 +224,12 @@ plot.prms = function(x, item_id=NULL, dataSrc=NULL, predicate=NULL, nbins=5, ci 
       stop('unknown item',call.=FALSE)
     }
     
-    x$abl_tables = list() # in dexmst it was briefly an environment
+    x$abl_tables = list()
     
-	  x$abl_tables$mle = suppressWarnings({inner_join(respData$design,x$inputs$ssI,by='item_id')}) %>%
+	  x$abl_tables$mle =  suppressWarnings({inner_join(respData$design, x$inputs$ssI,by='item_id')}) %>%
       group_by(.data$booklet_id) %>%
       do({
-        est = theta_MLE(x$est$b, a=x$inputs$ssIS$item_score, .$first, .$last, se=FALSE)
+        est = theta_MLE(b=x$est$b, a=x$inputs$ssIS$item_score, first=.$first, last=.$last, se=FALSE)
         theta = est$theta[2:(length(est$theta)-1)]
         tibble(booklet_score=1:length(theta), theta = theta)
       }) %>%
@@ -272,14 +271,16 @@ plot.prms = function(x, item_id=NULL, dataSrc=NULL, predicate=NULL, nbins=5, ci 
           max(plt$gr_theta)+.5*rng/nbins)
   
   plot.args = merge_arglists(dots,
-                             default=list(bty='l',xlab = expression(theta), ylab='score',main=item_id),
+                             default=list(bty='l',xlab = expression(theta), ylab='score',main=item_id,
+                                          lwd=par('lwd')),
                              override=list(x = rng,y = c(0,max_score), type="n"))
   
   plot.args$main = fstr(plot.args$main, list(item_id=item_id))
   plot.args$sub = fstr(plot.args$sub, list(item_id=item_id))
   
-  do.call(plot, plot.args)
-  lines(plt$gr_theta,plt$expected_score, col='grey80') 
+  if(!add) do.call(plot, plot.args)
+
+  plot(expf,from = rng[1], to=rng[2], col=col.model, add=TRUE,lwd=plot.args$lwd)
   
   plt$outlier = FALSE
   
@@ -303,11 +304,14 @@ plot.prms = function(x, item_id=NULL, dataSrc=NULL, predicate=NULL, nbins=5, ci 
     suppressWarnings({
       arrows(plt$gr_theta, plt$conf_min, 
              plt$gr_theta, plt$conf_max, 
-             length=0.05, angle=90, code=3, col='grey80')})
+             lwd=plot.args$lwd,
+             length=0.05, angle=90, code=3, col=col.model)})
   } 
   
-  lines(plt$gr_theta,plt$avg_score)  
-  points(plt$gr_theta, plt$avg_score, bg = if_else(plt$outlier, qcolors(1), 'transparent'), pch=21)
+  lines(plt$gr_theta,plt$avg_score,col=col,lwd=plot.args$lwd)  
+  points(plt$gr_theta, plt$avg_score, 
+         bg = if_else(plt$outlier, qcolors(1), coalesce(plot.args$bg,'transparent')), 
+         pch = coalesce(dots$pch,21), col=col)
   invisible(df_format(plt))
 }
 
@@ -334,8 +338,8 @@ print.prms = function(x, ...){
 #' @param object an enorm parameters object, generated by the function \code{\link{fit_enorm}}
 #' @param hpd width of Bayesian highest posterior density interval around mean_beta, 
 #'  value must be between 0 and 1, default is 0.95 
-#' @param what which coefficients to return. Defaults to `items` (the item parameters). Can also be `var` for the 
-#' variance-covariance matrix (CML only) or `posterior` for all draws of the item parameters (Bayes only)  
+#' @param what which coefficients to return. Defaults to \code{items} (the item parameters). Can also be \code{var} for the 
+#' variance-covariance matrix (CML only) or \code{posterior} for all draws of the item parameters (Bayes only)  
 #' @param ... further arguments to coef are ignored
 #'  
 #' @return 
@@ -423,6 +427,8 @@ coef.prms = function(object, hpd = 0.95, what=c('items','var','posterior'), ...)
 #' 
 #' @examples
 #' 
+#' \dontshow{ RcppArmadillo::armadillo_throttle_cores(1)}
+#' 
 #' db = start_new_project(verbAggrRules,':memory:')
 #' add_booklet(db,verbAggrData, "agg")
 #' p = fit_enorm(db)
@@ -453,6 +459,8 @@ coef.prms = function(object, hpd = 0.95, what=c('items','var','posterior'), ...)
 #' par(op)
 #' close_project(db)
 #' 
+#' \dontshow{ RcppArmadillo::armadillo_reset_cores()}
+#' 
 information = function(parms, items=NULL, booklet_id=NULL, which.draw=NULL)
 {
   theta_function(parms, items=items, booklet=booklet_id, which.draw=which.draw, what='information')
@@ -481,6 +489,10 @@ theta_function = function(parms, items=NULL, booklet=NULL, which.draw=NULL,
                           what=c('information','expected','sim','pmf'))
 {
   what = match.arg(what)
+  if(is.factor(items)) items = as.character(items)
+  check_character(items,nullable=TRUE)
+  check_string(booklet,name='booklet_id',nullable=TRUE)
+  check_num(which.draw,nullable=TRUE)
   
   # data preparation
   # create fl(item_id,first,last), a, b
@@ -544,7 +556,7 @@ theta_function = function(parms, items=NULL, booklet=NULL, which.draw=NULL,
         distinct(.data$item_id, .keep_all=TRUE)
     }  
     fl = arrange(fl,.data$first)
-  }  
+  } else stop_('parms must be a data.frame or an object of type `prms`') 
   rm(parms)  
   #output
   
@@ -614,167 +626,3 @@ print.sim_func = function(x,...) cat('function to simulate item scores: (x_i1, .
 print.pmf_func = function(x,...) cat('Conditional score distribution function: P(x_+|theta)\n')
 
 
-#' Latent correlations
-#'
-#' Estimates correlations between latent traits. Use an item_property to distinguish the different scales. 
-#' This function uses plausible values so results may differ slightly between calls. 
-#' Note: this is a new and slightly experimental function and therefore still a bit slow. It will probably 
-#' become faster in future versions of dexter.
-#'
-#' @param dataSrc A connection to a dexter database or a data.frame with columns: person_id, item_id, item_score and 
-#' the item_property
-#' @param item_property The name of the item property used to define the domains. If \code{dataSrc} is a dexter db then the
-#' item_property must match a known item property. If datasrc is a data.frame, item_property must be equal to
-#'  one of its column names.
-#' @param predicate An optional expression to subset data, if NULL all data is used
-#' @param nDraws Number of draws for plausible values
-#' @param hpd width of Bayesian highest posterior density interval around the correlations, 
-#'  value must be between 0 and 1.
-#' @param use Only complete.obs at this time. Respondents who don't have a score for one or more scales are removed.
-#' 
-#' @return List containing a estimated correlation matrix, the corresponding standard deviations, 
-#' and the lower and upper limits of the highest posterior density interval
-#' 
-latent_cor = function(dataSrc, item_property, predicate=NULL, nDraws=500, hpd=0.95, use="complete.obs")
-{
-  check_dataSrc(dataSrc)
-  check_num(nDraws, 'integer', .length=1, .min=1)
-  check_num(hpd,  .length=1, .min=1/nDraws,.max=1)
-  qtpredicate = eval(substitute(quote(predicate)))
-  env = caller_env()
-  
-  # use = pmatch(use, c("all.obs", "complete.obs", 
-  #                     "pairwise.complete.obs", "everything", "na.or.complete"))
-  
-  if(use != "complete.obs")
-    stop("only 'complete.obs' is currently implemented")
-  
-  pb = get_prog_bar(nDraws, retrieve_data = is_db(dataSrc), lock=TRUE)
-  on.exit({pb$close()})
-  
-  from = 5
-  by = 2
-  which.keep = seq(from,(from-by)*(from>by)+by*nDraws,by=by)
-  nIter=max(which.keep)
-  
-  if(is.matrix(dataSrc))
-  {
-    # to do: we can take a char vector of length ncol, but that goes for all
-    # analyses functions with item_properties, ip's can be made more flexible for df as well
-    stop("a matrix datasrc is not yet implemented for this function")
-  }
-  # to do: this is a bit tricky, we will often need to merge over persons, e.g. if booklets are administered
-  # per subject. But if the same person makes multiple tests for the same subject, this is not good.
-  # Still have to decide on a solution
-  
-  respData = get_resp_data(dataSrc, qtpredicate, env=env, extra_columns=item_property,
-                           merge_within_persons=TRUE)
-
-  respData$x[[item_property]] = ffactor(as.character(respData$x[[item_property]]))
-  lvl = levels(respData$x[[item_property]])
-  nd = length(lvl)
-  
-  pb$set_nsteps(nIter + 4*nd)
-  
-  respData$x = respData$x %>%
-    group_by(.data$person_id) %>%
-    filter(nd == n_distinct(.data[[item_property]])) %>%
-    ungroup()
-  
-  respData$x$person_id = ffactor(respData$x$person_id,as_int=TRUE)
-  
-  
-  np = max(respData$x$person_id)
-  respData = lapply(split(respData$x, respData$x[[item_property]]), get_resp_data)
-  models = lapply(respData, function(x){try(fit_enorm(x), silent=TRUE)})
-  names(models)=names(respData)
-  if(any(sapply(models,inherits,what='try-error')))
-  {
-    message('\nThe model could not be estimated for one or more item properties, reasons:')
-    models[!sapply(models,inherits,what='try-error')] = 'OK'
-    print(data.frame(item_property=names(models), 
-                      result=gsub('^.+try\\(\\{ *:','',trimws(as.character(models)))))
-    stop('Some models could not be estimated')
-  }
-  
-  abl = mapply(ability, respData, models, SIMPLIFY=FALSE,
-               MoreArgs = list(method="EAP", prior="Jeffreys",standard_errors=FALSE))
-  
-  pb$tick(2*nd)
-  
-  # some matrices
-  # we cannot rely on order in ability so this is the way for now
-  abl_mat = matrix(NA_real_,np,nd)
-  for(d in 1:nd)
-    abl_mat[abl[[d]]$person_id,d] = abl[[d]]$theta
-
-  
-  acor = cor(abl_mat,use=use)
-  pv = matrix(0,np,nd)
-  
-  reliab = rep(0,nd)
-  sd_pv = rep(0,nd)
-  mean_pv = rep(0,nd)
-  for (i in 1:nd)
-  {
-    pvs = plausible_values(respData[[i]],models[[i]],nPV = 2)
-    reliab[i] = cor(pvs$PV1,pvs$PV2)
-    sd_pv[i] = sd(pvs$PV1)
-    mean_pv[i] = mean(pvs$PV1)
-    pv[pvs$person_id,i] = pvs$PV1
-  }
-  pb$tick(2*nd)
-  
-  for (i in 1:(nd-1))
-  {
-    for (j in ((i+1):nd)){
-      acor[i,j] = acor[i,j]/sqrt(reliab[i]*reliab[j])
-      acor[j,i] = acor[i,j]
-    }
-  }
-  
-  out_sd=matrix(0,nd,nd)
-  out_cor = acor
-  
-  # make everything simple and zero indexed
-  models = lapply(models, simplify_parms, zero_indexed=TRUE)
-  respData = lapply(respData, get_resp_data, summarised=TRUE)
-  for(d in 1:nd)
-  {
-    respData[[d]]$x$booklet_id = as.integer(respData[[d]]$x$booklet_id) - 1L
-    models[[d]]$bcni = c(0L,cumsum(table(as.integer(models[[d]]$design$booklet_id))))
-  }
-  
-  prior = list(mu=mean_pv, Sigma = diag(1.7*sd_pv) %*% acor %*% diag(1.7*sd_pv))
-  
-  store = matrix(0, length(which.keep), length(as.vector(prior$Sigma)))
-  tel = 1
-  for (i in 1:nIter)
-  {
-    for (d in 1:nd)
-    {
-      cons = condMoments(prior$mu, prior$Sigma, d, x.value=pv[,-d]) 
-
-      PV_sve(models[[d]]$b, models[[d]]$a, models[[d]]$design$first, models[[d]]$design$last, 					
-             models[[d]]$bcni,
-             respData[[d]]$x$booklet_id, respData[[d]]$x$booklet_score, cons$mu, sqrt(cons$sigma),
-             pv,d-1L, 10L)
-    }
-    
-    
-    prior = update_MVNprior(pv,prior$Sigma)
-
-    if (i %in% which.keep){
-      store[tel,] = as.vector(cov2cor(prior$Sigma))
-      tel=tel+1
-    }
-    pb$tick()
-  }
-  out_sd = matrix(apply(store,2,sd),nd,nd)
-  diag(out_sd)=0
-  pd = t(apply(store,2,hpdens, conf=hpd))
-  res = list(cor = matrix(colMeans(store),nd,nd), sd = out_sd,
-             hpd_l = matrix(pd[,1], nd, nd), hpd_h = matrix(pd[,2], nd, nd))
-
-  lapply(res, function(x){colnames(x) = rownames(x) = names(models); x})
-}

@@ -12,6 +12,45 @@
   invisible()
 }
 
+get_ncores = function(desired=256L, maintain_free=0L)
+{
+  # relevant discussion: https://github.com/Rdatatable/data.table/issues/5658
+  
+  min_not_NA = function(...)
+  {
+    x = c(...)
+    x = x[!is.na(x)]
+    if(length(x)==0) NA_integer_
+    else min(x)
+  }
+  
+  if(Sys.getenv("_R_CHECK_LIMIT_CORES_") != "" || 
+     Sys.getenv("_R_CHECK_EXAMPLE_TIMING_CPU_TO_ELAPSED_THRESHOLD_") != "")
+  {
+    # we are on cran
+    as.integer(min(desired, 2L))
+  } else
+  {
+    n_cores = omp_ncores()
+    
+    user_maximum = if(!is.null(getOption('dexter.max_cores'))){
+      getOption('dexter.max_cores')
+    } else
+    {
+      min_not_NA(as.integer(Sys.getenv("OMP_THREAD_LIMIT")), getOption("Ncpus"))
+    }
+    
+    if(is.na(user_maximum))
+      user_maximum = n_cores - maintain_free
+    
+    available = min(c(n_cores, user_maximum), 
+                    na.rm=TRUE)
+    
+    as.integer(min(desired, max(1L, available )))
+  }
+}
+
+
 
 explicit_NA = function(x, replace_NA_with = c('<NA>','.NA.','<<NA>>','__NA__'))
 {
@@ -29,32 +68,6 @@ explicit_NA = function(x, replace_NA_with = c('<NA>','.NA.','<<NA>>','__NA__'))
   stop('could not resolve NA values')
   
 }
-
-
-## Burnin and thinning for different purposes:
-# cal: Bayesian calibration
-# pv: plausible values
-# ps: plausible scores
-Gibbs.settings = list(from.cal = 20L, step.cal = 2L, start_b='cml',
-                      from.pv = 20L, step.pv = 5L,
-                      from.ps = 1L, step.ps = 1L)
-
-
-
-which_gibbs = function(n_samples, n_gibbs)
-{
-  step = n_gibbs %/% n_samples
-  from = (n_gibbs %% n_samples) + 1L
-  
-  which = 
-    if(step>0)
-      seq(from, n_gibbs, step)
-    else
-      1:n_samples
-  
-  list(step=step, from=from, which=which, enough = step>0)
-}
-
 
 df_format = function(df)
 {
@@ -312,7 +325,7 @@ check_db = function(x)
 
 
 check_vector = function(x, type=c('character','numeric','integer'), name = deparse(substitute(x)), 
-                        nullable = FALSE, .length = NULL, .min=NULL, .max=NULL )
+                        nullable = FALSE, .length = NULL, .min=NULL, .max=NULL, min_length=NULL )
 {
   if(nullable && is.null(x))
     return(NULL)
@@ -340,23 +353,27 @@ check_vector = function(x, type=c('character','numeric','integer'), name = depar
 
   if(!is.null(.length) && length(x) != .length )  
     stop_("Argument '",name, "' must have length ", .length)
+  
+  if(is.null(length) && !is.null(min_length) && length(x)<min_length)
+    stop_("Argument '",name, "' must have minimum length ", min_length)
  
+  NULL
 }
   
   
 check_num = function(x, type=c('numeric','integer'), name = deparse(substitute(x)), 
-                     nullable = FALSE, .length = NULL, .min=NULL, .max=NULL )
+                     nullable = FALSE, .length = NULL, .min=NULL, .max=NULL, min_length=1 )
 {
   type=match.arg(type)
   name=force(name)
-  check_vector(x,type=type,name=name,nullable=nullable,.length=.length,.min=.min,.max=.max)
+  check_vector(x,type=type,name=name,nullable=nullable,.length=.length,.min=.min,.max=.max,min_length=min_length)
 }
 
 
-check_character = function(x, name = deparse(substitute(x)), nullable = FALSE, .length = NULL)
+check_character = function(x, name = deparse(substitute(x)), nullable = FALSE, .length = NULL,min_length=1)
 {
   name=force(name)
-  check_vector(x,type='character',name=name,nullable=nullable,.length=.length)
+  check_vector(x,type='character',name=name,nullable=nullable,.length=.length,min_length=min_length)
 }
 
 check_string = function(x, name = deparse(substitute(x)), nullable = FALSE)
@@ -544,20 +561,6 @@ hpdens = function(x, conf=0.95)
 }
 
 
-# For a discrete vector x, this function gives 
-# Frequencies P(x operator i) for i in min_max[1]:min_max[2]
-# where operator can be ==, <, <=, etc.
-# is min_max=NULL the range is min(x):max(x)
-my_freq = function(x, min_max = min(x):max(x), operator = c("==", "<", "<=", ">", ">=","!="))
-{
-  if(!is.function(operator))
-    operator = get(match.arg(operator))
-  
-  out = sapply(min_max, function(i) {sum(operator(x, i))} )/length(x)
-  names(out) = min_max
-  out
-}
-
 geo_mean = function(x)
 {
    return(exp(mean(log(x))))
@@ -575,7 +578,7 @@ r2gm = function(x, J)
 
 ### Weights based on a rank-one approximation to the
 # Interaction model
-c2weights<-function(cIM)
+c2weights = function(cIM)
 {
   hh=kronecker(t(cIM),cIM,'+')
   gg=eigen(hh)
@@ -654,49 +657,20 @@ conf_env = function(mat, level = 0.95)
 ## Regular Block-Diagnal Matrix from List of matrices
 # Courtesy of C.Ladroue
 blockMatrixDiagonal<-function(...){  
-  matrixList<-list(...)
-  if(is.list(matrixList[[1]])) matrixList<-matrixList[[1]]
+  matrixList =list(...)
+  if(is.list(matrixList[[1]])) matrixList = matrixList[[1]]
   
-  dimensions<-sapply(matrixList,FUN=function(x) dim(x)[1])
-  finalDimension<-sum(dimensions)
-  finalMatrix<-matrix(0,nrow=finalDimension,ncol=finalDimension)
-  index<-1
+  dimensions = sapply(matrixList,FUN=function(x) dim(x)[1])
+  finalDimension = sum(dimensions)
+  finalMatrix = matrix(0,nrow=finalDimension,ncol=finalDimension)
+  index = 1
   for(k in 1:length(dimensions)){
-    finalMatrix[index:(index+dimensions[k]-1),index:(index+dimensions[k]-1)]<-matrixList[[k]]
-    index<-index+dimensions[k]
+    finalMatrix[index:(index+dimensions[k]-1),index:(index+dimensions[k]-1)] = matrixList[[k]]
+    index = index+dimensions[k]
   }
   finalMatrix
 }
 
-#
-# mean and variance of Y|x if x,y is multivariate normal
-#
-# with mean mu and variance-covariance matrix sigma
-# @param m vector of means
-# @param sigma covariance matrix
-# @param y.ind indices dependent variable(s)
-# @param x.ind indices conditioning variables. If null its just all others
-# @param x.value value of conditioning variables
-# 
-condMoments = function(mu, sigma, y.ind, x.ind=NULL, x.value )
-{
-  if (is.null(x.ind)) x.ind = setdiff(1:length(mu), y.ind)
-  B = sigma[y.ind, y.ind]
-  C = sigma[y.ind, x.ind, drop = FALSE]
-  D = sigma[x.ind, x.ind]
-  CDinv = C %*% solve(D)
-  if (is.vector(x.value))
-  {
-    cMu = c(mu[y.ind] + CDinv %*% (x.value - mu[x.ind]))
-  }else
-  {
-    nP = nrow(x.value)
-    cMu = rep(0,nP)
-    for (i in 1:nP) cMu[i] = mu[y.ind] + CDinv %*% (x.value[i,] - mu[x.ind])
-  }
-  cVar = B - CDinv %*% t(C)
-  return(list(mu=cMu, sigma=cVar))
-}
 
 
 # log(sum(exp(x)))

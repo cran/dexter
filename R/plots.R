@@ -96,8 +96,7 @@ distractor_plot = function(dataSrc, item_id, predicate=NULL, legend=TRUE, curtai
   env = caller_env()
   item_id = as.character(item_id)
   check_string(item_id)
-  item = item_id
-  
+
   user.args = list(...); leg.args = list()
   if(length(names(user.args))>0)
   {
@@ -108,48 +107,50 @@ distractor_plot = function(dataSrc, item_id, predicate=NULL, legend=TRUE, curtai
   
   iprop = list()
   if(is_db(dataSrc))
-    iprop = as.list(dbGetQuery_param(dataSrc,'SELECT * FROM dxItems WHERE item_id= :item;', 
-                                     tibble(item=item)))
+    iprop = as.list(dbGetQuery_param(dataSrc,'SELECT * FROM dxItems WHERE item_id= :item_id;', 
+                                     tibble(item_id=item_id)))
   
   
   if(is.null(qtpredicate) && is_db(dataSrc))
   {
     # pre process a little to make things faster
   	booklets = dbGetQuery_param(dataSrc,
-  	     'SELECT booklet_id FROM dxbooklet_design WHERE item_id=:item;', tibble(item=item)) %>%
+  	     'SELECT booklet_id FROM dxbooklet_design WHERE item_id=:item_id;', tibble(item_id=item_id)) %>%
   		pull('booklet_id') %>%
   	  sql_quote("'") %>%
   		paste(collapse=',')
   	
     qtpredicate = sql(paste0("booklet_id IN(",booklets,")"), 'booklet_id')
   } 
-  
+  item = item_id
   respData = get_resp_data(dataSrc, qtpredicate = qtpredicate, extra_columns='response', env=env, summarised=FALSE) %>%
-    filter(.data$item_id == item, .recompute_sumscores = FALSE )
+    filter_rd(.data$item_id == item, .recompute_sumscores = FALSE )
   
 
   if (nrow(respData$design) == 0) 
-    stop(paste("Item", item, "not found in dataSrc."))
+    stop(paste("Item", item_id, "not found in dataSrc."))
   
 
   if('item_position' %in% colnames(respData$design))
   {
-    ipos = respData$design
+    ipos = filter(respData$design, .data$item_id==!!item_id)
   } else if(is_bkl_safe(dataSrc, qtpredicate, env) && is_db(dataSrc))
   {
     ipos = dbGetQuery(dataSrc, paste("SELECT booklet_id, item_position FROM dxbooklet_design WHERE item_id=", 
-                                     sql_quote(item,"'")))
+                                     sql_quote(item_id,"'")))
   } else if(inherits(dataSrc,'data.frame') && 'item_position' %in% colnames(dataSrc))
   {
-    ipos = respData$design = dataSrc %>%
-      filter(.data$item_id==item) %>%
+    ipos = dataSrc %>%
+      filter(.data$item_id==!!item_id) %>%
       distinct(.data$booklet_id,.keep_all=TRUE)
   } else
   {
-    ipos = respData$design
+    ipos = filter(respData$design, .data$item_id==!!item_id)
   }
+  ipos=select(ipos,any_of(c('booklet_id','item_position')))
+  
   if(inherits(dataSrc,'data.frame'))
-     respData$x = mutate(respData$x,response=coalesce(.data$response,'<NA>'))
+     respData$x = mutate(respData$x,response=coalesce(as.character(.data$response),'<NA>'))
 
   default.args = list(sub = "Pval: $pvalue:.2f, Rit: $rit:.3f, Rir: $rir:.3f", 
                       xlab = "Sum score", ylab = "Proportion", cex.sub = 0.8, xaxs="i", bty="l")
@@ -182,7 +183,7 @@ distractor_plot = function(dataSrc, item_id, predicate=NULL, legend=TRUE, curtai
   }
   
   
-  lapply(split(rsp_counts, rsp_counts$booklet_id), function(y)
+  lapply(split(rsp_counts, as.character(rsp_counts$booklet_id)), function(y)
   {
     booklet = y$booklet_id[1]
     
@@ -201,9 +202,9 @@ distractor_plot = function(dataSrc, item_id, predicate=NULL, legend=TRUE, curtai
                   rit = weighted_cor(y$item_score, y$booklet_score, y$n),
                   rir = weighted_cor(y$item_score, y$booklet_score - y$item_score, y$n),
                   n = N,
-                  item_position = filter(respData$design, .data$booklet_id==booklet)$item_position,
+                  item_position = filter(ipos, .data$booklet_id==booklet)$item_position,
                   booklet_id=booklet,
-                  item_id=item))
+                  item_id=item_id))
       
       plot.args = merge_arglists(user.args, 
                                  default=default.args,
@@ -222,7 +223,8 @@ distractor_plot = function(dataSrc, item_id, predicate=NULL, legend=TRUE, curtai
       do.call(plot, plot.args)
       draw_curtains(qnt)
       
-      dAll = density(bkl_scores$booklet_score, n = 512, weights = bkl_scores$n/N, adjust=adjust)
+      dAll = density(bkl_scores$booklet_score, n = 512, weights = bkl_scores$n/N, adjust=adjust,
+                     from=0,to=max(bkl_scores$booklet_score),warnWbw=FALSE)
       
       lgnd = y %>% 
         group_by(.data$response)  %>% 
@@ -236,7 +238,7 @@ distractor_plot = function(dataSrc, item_id, predicate=NULL, legend=TRUE, curtai
           } else
           {
             dxi = density(.$booklet_score, weights = .$n/sum(.$n), n = 512,
-                        bw = dAll$bw, from = min(dAll$x), to = max(dAll$x))
+                        bw = dAll$bw, from = min(dAll$x), to = max(dAll$x),warnWbw=FALSE)
             yy = dxi$y/dAll$y * sum(.$n)/N
             lines(dAll$x, yy, col = k, lw = 2)
           }
@@ -311,10 +313,10 @@ pp_segments = function(maxA, maxB, psbl, col='lightgray',cex=0.6)
 #' @param model "IM" (default) or "RM" where "IM" is the interaction model and 
 #' "RM" the Rasch model. The interaction model is the default as it fits 
 #' the data better or at least as good as the Rasch model.
-#' @param x Which value of the item_property to draw on the x axis, if NULL, one is chosen automatically
+#' @param x Which category of the item_property to draw on the x axis, if NULL, one is chosen automatically
 #' @param col vector of colors to use for plotting
 #' @param col.diagonal color of the diagonal lines representing the testscores
-#' @param ... further arguments to plot
+#' @param ... further graphical arguments to plot. Graphical parameters for the legend can be postfixed with \code{.legend}
 #' @details 
 #' Profile plots can be used to investigate whether two (or more) groups of respondents 
 #' attain the same test score in the same way. The user must provide a  
@@ -330,7 +332,9 @@ pp_segments = function(maxA, maxB, psbl, col='lightgray',cex=0.6)
 #' investigate differential item functioning. 
 #'
 #' @examples
-
+#' 
+#' \dontshow{ RcppArmadillo::armadillo_throttle_cores(1)}
+#' 
 #' db = start_new_project(verbAggrRules, ":memory:", 
 #'                          person_properties=list(gender="unknown"))
 #' add_booklet(db, verbAggrData, "agg")
@@ -339,6 +343,7 @@ pp_segments = function(maxA, maxB, psbl, col='lightgray',cex=0.6)
 #' 
 #' close_project(db)
 #' 
+#' \dontshow{ RcppArmadillo::armadillo_reset_cores()}
 #' 
 profile_plot = function(dataSrc, item_property, covariate, predicate = NULL, model = c("IM","RM"), x = NULL, 
                         col = NULL, col.diagonal='lightgray',...) 
@@ -370,7 +375,7 @@ profile_plot = function(dataSrc, item_property, covariate, predicate = NULL, mod
 	stop('profile_plot does not accept a matrix dataSrc')
   
   respData = get_resp_data(dataSrc, qtpredicate, extra_columns = covariate, env = env)  %>%
-	  intersection()
+	  intersection_rd()
   
   respData$x[[covariate]] = ffactor(respData$x[[covariate]])
   
@@ -405,7 +410,7 @@ profile_plot = function(dataSrc, item_property, covariate, predicate = NULL, mod
             B = which(domains[[item_property]] == props[2]))
   
   # fit interaction model and compute ssTable
-  models = by(respData, covariate, fit_inter_, regs=FALSE) 
+  models = by_rd(respData, covariate, fit_inter_, regs=FALSE) 
   
   tt = lapply(models, function(m)
   {

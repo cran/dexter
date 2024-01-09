@@ -38,13 +38,15 @@ The data driven direct consensus (3DC) method of standard setting was invented b
 To easily apply this procedure, we advise to use the free digital 3DC application. This application 
 can be downloaded from the Cito website, see the 
 \href{https://www.cito.com/our-expertise/implementation/3dc}{3DC application download page}. 
-If you want to apply the 3DC method using paper forms instead, you can use the function plot3DC to generate the forms
-from the 3DC database.
+If you want to apply the 3DC method using paper forms instead, you can use the plot method to generate the forms
+from thests_par object.
 
 Although the 3DC method is used as explained in Keuning et. al., the method we use for computing the forms is a simple
 maximum likelihood scaling from an IRT model, described in Moe and Verhelst (2017)
 }
 \examples{
+
+\dontshow{ RcppArmadillo::armadillo_throttle_cores(1)}
 
 library(dplyr)
 db = start_new_project(verbAggrRules, ":memory:")
@@ -63,6 +65,9 @@ plot(sts_par)
 
 
 # db_sts = standards_db(sts_par,'test.db',c('mildly aggressive','dangerously aggressive'))
+
+\dontshow{ RcppArmadillo::armadillo_reset_cores()}
+
 }
 \references{
 Keuning J., Straat J.H., Feskens R.C.W. (2017) The Data-Driven Direct Consensus (3DC) Procedure: A New Approach to Standard Setting. 

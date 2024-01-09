@@ -1,8 +1,24 @@
+# dexter 1.3.2
+
+## breaking changes
+
+* A small change in the interface for the plausible_values and plausible_scores functions, the slightly different argument `parms_draw` replaces `use_draw`.
+
+* The argument `standard_errors` in functions `ability` and `ability_tables` has been removed. Standard errors are now always returned.
+
+* argument `prior.dist` in plausible values has become `prior_dist` to maintain a consistent naming scheme in dexter.
+
+* Internal changes in the plausible values function will cause a slight increase in confidence intervals for population estimates when using multiple draws. We think this is more realistic. On the other hand, population estimates based on plausible values will now be more stable over different seeds or consecutive calls of `plausible_values`. Use of the same seed no longer guarantees the exact same outcomes across different computers.
+
+## other changes
+
+* more graphical options in `plot.prms`
+
 # dexter 1.2.2
 
 * changed license from GPL-3 to LGPL-3
 * tia_tables optionally includes statistics for distractors for MC questions
-* colors for distractor plots can be specigfied per respons
+* colors for distractor plots can be specified per response
 * updated error messages
 * bugfix: the confidence intervals in the fit plots for the enorm were drawn too wide for polytomous items in dexter <= 1.2.1. They are now correct.
 

@@ -1,6 +1,6 @@
 ## ----setup, include=FALSE-----------------------------------------------------
 library(knitr)
-opts_chunk$set(echo = TRUE)
+opts_chunk$set(echo = TRUE, message = FALSE)
 
 if (requireNamespace("Cairo", quietly = TRUE)) 
 {
@@ -15,6 +15,8 @@ par_hook = function(before, options, envir)
 }
 knit_hooks$set(par = par_hook)
 
+RcppArmadillo::armadillo_throttle_cores(1)
+
 library(dexter)
 library(dplyr)
 
@@ -25,24 +27,24 @@ sim_Rasch = r_score(items)
 theta = rep(0.5, 2000)
 simulated = sim_Rasch(theta)
 
-## ---- fig.align='center', fig.width=7,par=list(mfrow=c(1,2))------------------
+## ----fig.align='center', fig.width=7,par=list(mfrow=c(1,2))-------------------
 hist(rowSums(simulated), main='', xlab='sumScore')
 plot(ecdf(rowSums(simulated)), bty='l', main='ecdf', xlab='sumScore' )
 
-## ---- fig.align='center', fig.width=7,par=list(mfrow=c(1,2))------------------
+## ----fig.align='center', fig.width=7,par=list(mfrow=c(1,2))-------------------
 mm = fit_inter(simulated)
 
 plot(mm, show.observed = TRUE, 
      items = c('i1','i2'))
 
-## ---- fig.align='center', fig.height=4, fig.width=4---------------------------
+## ----fig.align='center', fig.height=4, fig.width=4----------------------------
 dd = individual_differences(simulated)
 plot(dd)
 
 ## -----------------------------------------------------------------------------
 dd
 
-## ---- fig.align='center', fig.height=4, fig.width=4,results='hide',message=FALSE----
+## ----fig.align='center', fig.height=4, fig.width=4,results='hide'-------------
 db = start_new_project(verbAggrRules, ":memory:")
 add_booklet(db, verbAggrData, "data")
 
@@ -52,6 +54,7 @@ plot(dd)
 ## -----------------------------------------------------------------------------
 dd
 
-## ---- include=FALSE-----------------------------------------------------------
+## ----include=FALSE------------------------------------------------------------
 close_project(db)
+RcppArmadillo::armadillo_reset_cores()
 

@@ -1,7 +1,7 @@
 
 
 ## produces a matrix of statistics for pairwise DIF
-PairDIF_ <- function(beta1, beta2, acov.beta1, acov.beta2)
+PairDIF_ = function(beta1, beta2, acov.beta1, acov.beta2)
 {
   labs = rownames(beta1)
   DR = kronecker(beta2,t(beta2),FUN="-")-kronecker(beta1,t(beta1),FUN="-") 
@@ -19,7 +19,7 @@ PairDIF_ <- function(beta1, beta2, acov.beta1, acov.beta2)
 # beta1 and beta1 are both mean centered and do not contain the zero category. 
 # In general, this works if both sets of parameters have the same normalization.
 # If a reference item is set to zero, r should be its index.
-OverallDIF_ <- function(beta1, beta2, acov1, acov2)
+OverallDIF_ = function(beta1, beta2, acov1, acov2)
 {
   r = 1
   nI = length(beta1)
@@ -54,6 +54,9 @@ OverallDIF_ <- function(beta1, beta2, acov1, acov2)
 #' @seealso A plot of the result is produced by the function \code{\link{plot.DIF_stats}}
 #' 
 #' @examples
+#' 
+#' \dontshow{ RcppArmadillo::armadillo_throttle_cores(1)}
+#' 
 #' db = start_new_project(verbAggrRules, ":memory:", person_properties=list(gender='unknown'))
 #' add_booklet(db, verbAggrData, "agg")
 #' dd = DIF(db,person_property="gender")
@@ -62,6 +65,8 @@ OverallDIF_ <- function(beta1, beta2, acov1, acov2)
 #' str(dd)
 #' 
 #' close_project(db)
+#' 
+#' \dontshow{ RcppArmadillo::armadillo_reset_cores()}
 #' 
 DIF = function(dataSrc, person_property, predicate=NULL) 
 {
@@ -88,7 +93,7 @@ DIF = function(dataSrc, person_property, predicate=NULL)
   
   
   ## 2. Estimate models with fit_enorm using CML
-  models = by(respData, person_property, fit_enorm)
+  models = by_rd(respData, person_property, fit_enorm)
   
   ## 3. get the intersection
   common_items = models[[1]]$inputs$ssIS %>%
@@ -126,7 +131,7 @@ DIF = function(dataSrc, person_property, predicate=NULL)
   items = models[[1]]$inputs$ssIS %>%
     semi_join(common_items,by='item_id') %>%
     filter(.data$item_score > 0) %>%
-    select(.data$item_id, .data$item_score) %>%
+    select('item_id', 'item_score') %>%
     arrange(.data$item_id, .data$item_score) %>%
     mutate(item_id=as.character(.data$item_id))
   
@@ -245,7 +250,7 @@ plot.DIF_stats = function(x, items = NULL, itemsX = items, itemsY = items, alpha
                                          col=col,breaks=breaks),
                          default = default.args))
   
-  cex.axis = c(user.args$cex.axis, 0.6)[1]
+  cex.axis = coalesce(user.args$cex.axis, 0.6)
   axis(1, at=1:length(yLabels), labels=yLabels, las=3, cex.axis=cex.axis, hadj=1,padj=0.5)
   axis(2, at=1:length(xLabels), labels=xLabels, las=1, cex.axis=cex.axis, hadj=1,padj=0.5)
   
@@ -266,59 +271,3 @@ plot.DIF_stats = function(x, items = NULL, itemsX = items, itemsY = items, alpha
   invisible(NULL)
 }
 
-
-
-
-# DIF_heatmap = function(x, items = NULL, itemsX = items, itemsY = items, alpha =.05,...)
-# {
-#   if(is.null(itemsX)) itemsX = sort(unique(x$items$item_id))
-#   if(is.null(itemsY)) itemsY = sort(unique(x$items$item_id))
-#   
-#   if(length(setdiff(c(itemsX, itemsY), x$items$item_id)) > 0)
-#   {
-#     cat('items not found in DIF object:\n')
-#     print(setdiff(c(itemsX, itemsY), x$items))
-#     stop('some of the item_ids you specified are not present in the DIF object')
-#   }
-#   
-#   x$items = x$items %>%
-#     mutate(rn = row_number())
-#   
-#   itemsX = x$items %>%
-#     inner_join(tibble(item_id = itemsX, ord = 1:length(itemsX)), by='item_id') %>%
-#     arrange(.data$ord)
-#   
-#   itemsY = x$items %>%
-#     inner_join(tibble(item_id = itemsY, ord = 1:length(itemsY)), by='item_id') %>%
-#     arrange(.data$ord)
-#   
-#   DIF_pair = abs(x$DIF_pair[itemsX$rn, itemsY$rn])
-#   
-#   
-#   if(nrow(distinct(x$items,.data$item_id)) == nrow(x$items))
-#   {
-#     yLabels = pull(itemsY, 'item_id')
-#     xLabels = pull(itemsX, 'item_id')
-#   } else
-#   {
-#     yLabels = paste(itemsY$item_id, itemsY$item_score)
-#     xLabels = paste(itemsX$item_id, itemsX$item_score)
-#   }
-#   
-#   dimnames(DIF_pair) = list(xLabels, yLabels)
-#   max_ = max(x$DIF_pair)
-#   qn = qnorm(1-alpha/2)
-#   breaks = seq(0, qn, length=50)
-#   col = colorRampPalette(c('white','lightblue'))(length(breaks)-1)
-#   if(max_ > qn)
-#   {
-#     breaks_b = seq(qn+0.01, max_, length=50)
-#     col = c(col,colorRampPalette(c('gold1','red2'))(length(breaks_b)))
-#     breaks = c(breaks, breaks_b)
-#   }
-#   
-#   pheatmap::pheatmap(DIF_pair, colors=col, breaks=breaks, ...)  
-#   
-#   
-#   invisible(NULL)
-# }

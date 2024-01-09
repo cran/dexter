@@ -4,13 +4,7 @@ library(dplyr)
 library(DBI)
 library(RSQLite)
 
-
-
-
-
-expect_no_error = function(object, info=NULL) expect_error(object, regexp=NA, info=info)
-
-
+RcppArmadillo::armadillo_throttle_cores(1)
 
 verbAggCopy = function(pth = '../verbAggression.db')
 {
@@ -53,7 +47,7 @@ test_that('rule updates and sanity checks',
   
   # update set does not have to pass this sanity check on it's own
   expect_no_error(touch_rules(db, filter(rules, item_id=='S1DoCurse' & response ==1) %>% mutate(item_score=0)),
-                  info='expect allowed to set an item score to 0')
+                  message='expect allowed to set an item score to 0')
   
   # but it should shout when every score is set to 0 for an item
   expect_output(
@@ -119,7 +113,10 @@ test_that('adding person and item properties',
 
   items = get_items(db)
   
-  expect_true(all(items %>% filter(item_id=='S4DoCurse') %>% select(blame,news) %>% unlist() == c("society", "olds" )))
+  expect_true(all(items %>% 
+                    filter(item_id=='S4DoCurse') %>% 
+                    select(blame,news) %>% 
+                    unlist() == c("society", "olds" )))
   
   expect_output({add_item_properties(db, default_values = list(a=4L))},
                 '1 new item_properties defined')
@@ -139,12 +136,17 @@ test_that('adding person and item properties',
   # person "1" does not exist
   expect_output({add_person_properties(db,tibble(person_id=1,b=2))}, '0 persons')
   
-  expect_output({add_person_properties(db,tibble(person_id='dxP1', gender='unchecked', news='olds'))},
+  
+  
+  expect_output({add_person_properties(db,tibble(person_id=get_persons(db)$person_id[1], gender='unchecked', news='olds'))},
                 '2 person properties? for 1 persons? added or updated', perl=TRUE)
   
   persons = get_persons(db)
   
-  expect_true(all(persons %>% filter(person_id=='dxP1') %>% select(gender,news) %>% unlist() == c("unchecked", "olds" )))
+  expect_true(all(persons %>% 
+                    filter(person_id=='dxP1') %>% 
+                    select(gender,news) %>% 
+                    unlist() == c("unchecked", "olds" )))
   
   expect_output({add_person_properties(db, default_values = list(x=4L))},
                 '1 new person_properties defined')
@@ -178,3 +180,22 @@ test_that('add_response_data',{
   
   dbDisconnect(db)
 })
+
+test_that('add_booklet',{
+  db = verbAggCopy()
+  
+  prs = get_persons(db)$person_id[1:5]
+  dat = verbAggrData[1:5,]
+  dat$person_id = prs
+  
+  expect_error({add_booklet(db, dat, "agg")},'overlap.+already imported',label='correct error for already existing booklet-persons')   
+  
+  dat$person_id='we are all the same person'
+  
+  expect_error({add_booklet(db, dat, "agg")},'person.+ duplicate',label='correct error for duplicate persons')   
+  
+  
+  dbDisconnect(db)
+})
+
+RcppArmadillo::armadillo_reset_cores()

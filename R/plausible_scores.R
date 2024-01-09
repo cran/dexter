@@ -1,9 +1,8 @@
 
-
-##########################################
-#' Generate plausible test scores
+#' Draw plausible test scores
 #'
-#' Generate plausible i.e., posterior predictive sumscores on a set of items. 
+#' Draw plausible, i.e. posterior predictive sumscores on a set of items. 
+#' 
 #' A typical use of this function is to generate plausible scores on
 #' a complete item bank when data is collected using an incomplete design
 #'
@@ -13,6 +12,9 @@
 #' @param parms An object returned by function \code{fit_enorm} and containing
 #' parameter estimates. If parms is given the function provides plausible scores conditional on the 
 #' item parameters. These are considered known. If \code{parms} is \code{NULL}, Bayesian parameters are calculated from the datasrc
+#' @param parms_draw when the item parameters are estimated Bayesianly (see: \code{\link{fit_enorm}}), 
+#' parms_draw specifies whether to use a sample(a different item parameter draw for each plausible values draw) or the posterior mean
+#' of the item draws. Alternatively, it can be an integer specifying a specific draw. Ignored when parms is not estimated Bayesianly.
 #' @param items vector of item_id's, this specifies the itemset to generate the testscores for. If \code{items} is \code{NULL} 
 #' all items occurring in \code{dataSrc} are used.
 #' @param covariates name or a vector of names of the variables to group the population, used to update the prior.
@@ -21,170 +23,133 @@
 #' @param keep.observed If responses to one or more of the items have been observed,
 #' the user can choose to keep these observations or generate new ones. 
 #' @param nPS Number of plausible testscores to generate per person.
+#' @param prior_dist use a normal prior for the plausible values or a mixture of two normals. 
+#' A mixture is only possible when there are no covariates.
 #' @param merge_within_persons If a person took multiple booklets, this indicates
 #' whether plausible scores are generated per person (TRUE) or per booklet (FALSE)
 #' @return A data.frame with columns booklet_id, person_id, booklet_score and nPS plausible scores
 #' named PS1...PSn.
 #'  
-plausible_scores = function(dataSrc, parms=NULL, predicate=NULL, items=NULL, 
-                            covariates=NULL, keep.observed=TRUE, nPS=1,merge_within_persons=FALSE)  
+plausible_scores = function(dataSrc, parms=NULL, predicate=NULL, items=NULL, parms_draw = c('sample','average'),
+                            covariates=NULL, nPS=1, prior_dist = c("normal", "mixture"),
+                            keep.observed=TRUE,merge_within_persons=FALSE)  
 {
   qtpredicate = eval(substitute(quote(predicate)))
   env = caller_env()
   check_dataSrc(dataSrc)
-
-  plausible_scores_(dataSrc, parms=parms, qtpredicate=qtpredicate, items=items, covariates=covariates, 
-                    keep.observed=keep.observed, nPS=nPS, env=env,
-                    merge_within_persons=merge_within_persons) %>%
-    mutate_if(is.factor, as.character) %>%
-    df_format()
-}
-
-# to do: this has become a messy function
-plausible_scores_ = function(dataSrc, parms=NULL, qtpredicate=NULL, items=NULL, 
-                             covariates=NULL, keep.observed=TRUE, nPS=1, env=NULL,
-                             merge_within_persons=FALSE)
-{
-  if (is.null(env))
-    env = caller_env()
   
-  from = Gibbs.settings$from.ps 
-  step = Gibbs.settings$step.ps # from and step are burnin and thinning
-  keep.which = seq(from,(from-step)*(from>step)+step*nPS,by=step)
-  nPS.needed = max(keep.which) # Given from and step, this many PS must be generated
-  
-  pb = get_prog_bar(nsteps=if(is.null(parms)) 120 else 100, 
+  pb = get_prog_bar(nsteps=if(is.null(parms)) 130 else 100, 
                     retrieve_data = is_db(dataSrc))
   on.exit({pb$close()})
   
-  if(is.null(parms))
-  {
-    pcheck=NULL
-  } else if(inherits(parms,'data.frame'))
-  {
-    parms = transform.df.parms(parms,'b', TRUE)
-    pcheck = parms[,c('item_id','item_score')]
-  } else
-  {
-    pcheck = parms$inputs$ssIS[,c('item_id','item_score')]
-  }
   
-  
-  respData = get_resp_data(dataSrc, qtpredicate, summarised = FALSE, 
-                           extra_columns = covariates, env = env, 
-                           parms_check=pcheck,
+  respData = get_resp_data(dataSrc, qtpredicate, summarised=FALSE, extra_columns=covariates, env=env,
                            merge_within_persons=merge_within_persons)
   
-  use_b_matrix = FALSE
-  
-  # if no parms, we calculate parms from the full data source
-  # and we opt for a Bayesian approach
-  if(is.null(parms))
-  {
-    nIter.enorm  = Gibbs.settings$from.pv + Gibbs.settings$step.pv*(nPS.needed-1)
-    pb$new_area(20)
-    parms = fit_enorm_(respData, method='Bayes', nDraws = nIter.enorm)
-    
-  } else if(inherits(parms,'prms') && parms$inputs$method != 'CML')
-  {
-    # if user parms was Bayesian we do some checks
-    if (nrow(parms$est$b) < nPS.needed) # are there enough samples ?
-    {
-      stop(paste("Not enough posterior samples in fit_enorm for", 
-              nPS, "plausible scores. Use at least", nPS.needed, "samples in fit_enorm"))
-
-    } else
-    {
-      use_b_matrix = TRUE
-    }
-  }  
-  
-  # now we make plausible values using all responses we have
-  pb$new_area(80) 
-  pv = plausible_values_(respData, parms = parms, covariates = covariates, nPV = nPS.needed)
-  pb$close_area()
-  
-  # clean up items
   if(is.null(items))
   {
-    items = unique(respData$design$item_id)
-  }
-  else 
+    items = levels(respData$design$item_id)
+  } else if(inherits(items,'data.frame'))
   {
-    if(inherits(items, 'data.frame'))
-      items = items$item_id
-    
-    items = unique(as.character(items))
-  }
-  
-  simple_parms = simplify_parms(parms, collapse_b = !use_b_matrix, design = tibble(item_id=items))
-  items = select(simple_parms$design, -.data$booklet_id) 
-  a = simple_parms$a
-  b = simple_parms$b
-  items$item_id = re_factor_item_id(respData, items$item_id)
-  levels(respData$x$item_id) = levels(respData$design$item_id) = levels(items$item_id)
-  
-  #save the full design since respData is be mutilated below
-  design = respData$design
-  
-  # remove responses that are not part of the specified itemset and recompute
-  if(length(intersect(respData$design$item_id, items$item_id)) == 0)
-  {
-    pv = mutate(pv, booklet_score = 0L)
+    items = as.character(unique(items$item_id))
   } else
   {
-    # since the sumscore in the plausible values is (possibly) based on more responses than occur in the item set
-    # we remove it in favor of the reduced testscores in the data
-    # if persons made 0 items in the selected set they get a testscore of 0 through the left join below
+    items = as.character(unique(items))
+  }
+  
+  # if there are no params, all of items must be in data
+  # if there are params, all of items must be in params
+  
+  if(is.null(parms) && !all(items %in% levels(respData$design$item_id)))
+  {
+    stop_("`items` contains item_id's not found in the data, you must either provide parameters reparately or ",
+          "specify only items present in your data")
+  } else if(!is.null(parms))
+  {
+    if(inherits(parms,'data.frame')) parms_items = as.character(unique(parms$item_id))
+    else parms_items = unique(coef(parms)$item_id)
     
-    respData = semi_join(respData, items, by='item_id', .recompute_sumscores = TRUE)
+    if(!all(items %in% parms_items))
+      stop_("`items` contains item_id's not found in the parameters")
+  }
+  
+  # generate plausible values and params
+  res = plausible_values_(respData, parms=parms, covariates=covariates, 
+                          nPV=nPS, parms_draw = parms_draw, 
+                          prior_dist = prior_dist)
+  
+  parms = res$parms
+  pv = res$pv
+  
+  items = factor(items,levels=levels(parms$items$item_id))
+  
+  fl = parms$items %>%
+    filter(.data$item_id %in% items) %>%
+    mutate(first = .data$first-1L, last = .data$last-1L)
+  
+  a = parms$a
+  if(is.matrix(parms$b))
+  {
+    b = t(parms$b)
+    bstep = as.integer((ncol(b)-1)/max(nPS-1,1))
+  } else
+  {
+    b = matrix(parms$b,ncol=1)
+    bstep = 0L
+  }
+  
+  if(keep.observed && any(respData$design$item_id %in% items))
+  {
+    # keep track of sumscore on selected items
     
-    # summarise to one row per person
-    respData = get_resp_data(respData, summarised = TRUE, protect_x=FALSE)
+    respData = semi_join_rd(respData, tibble(item_id=items), by='item_id', .recompute_sumscores = TRUE)
+    respData = get_resp_data(respData, summarised = TRUE, protect_x = !is_db(dataSrc))
     
     pv = pv %>% 
-      select(-.data$booklet_score) %>%
+      select(-'booklet_score') %>%
       left_join(respData$x,  by=c("person_id", "booklet_id")) %>%
       mutate(booklet_score = coalesce(.data$booklet_score, 0L))
-  }
-  pb$tick()
-  if(keep.observed)
-  {
-    # we need to have a list of booklets containing first and last
-    # for those items that were NOT in a booklet
-    # this can not be based on the parms, since parms can have different booklets than data(and thus pv)
-    # so we base it on design
-    bkList = lapply(split(design, design$booklet_id), 
-                    function(bk_items){ items %>% anti_join(bk_items, by='item_id') %>% arrange(.data$first)})
     
-    # to do: message when nothing new is generated 
-    pv = pv %>%
-      group_by(.data$booklet_id) %>%
-      do({
-        bk = as.data.frame(bkList[[.$booklet_id[1]]])
-        if(NROW(bk)==0)
+    pv = lapply(split(pv, pv$booklet_id), function(pvbk)
+    {
+      bk = pvbk$booklet_id[1]
+      
+      fl_bk = fl %>%
+        anti_join(filter(respData$design, .data$booklet_id == bk), by='item_id')
+      
+      #nothing to augment case
+      if(nrow(fl_bk) == 0)
+      {
+        for(pn in sprintf('PV%i',1:nPS)) pvbk[[pn]] = pvbk$booklet_score
+      } else
+      {
+        b_index = 1L
+        for(pn in sprintf('PV%i',1:nPS))
         {
-          mutate_at(.,vars(starts_with('PV')),`<-`, .$booklet_score )
-        } else
-        {
-          # we generate a score on the unobserved items and add to the score on the observed items
-          cntr = (function(){i=0L; function(){i<<-i+1L; i}})()
-          mutate_at(.,vars(starts_with('PV')), rscore, b=b, a=a, first=bk$first, last=bk$last, cntr=cntr, use_b_matrix = use_b_matrix) %>%
-            mutate_at(vars(starts_with('PV')), `+`, .$booklet_score)
-        }
-      }) %>%
-      ungroup()
+          pvbk[[pn]] = sampleNRM2_test(pvbk[[pn]], b[,b_index], a, fl_bk$first, fl_bk$last)[,1,drop=TRUE] + pvbk$booklet_score
+          b_index = b_index + bstep
+        }    
+      }
+      pvbk
+    }) %>%
+      bind_rows()
+    
   } else
   {
-    cnt =  (function(){i=0L;function(){i<<-i+1L;i}})()
-    pv = pv %>%
-      mutate_at(vars(starts_with('PV')), rscore, b=b, a=a, first=items$first,last=items$last,cntr=cnt, use_b_matrix = use_b_matrix)
+    b_index = 1L
+    
+    for(pn in sprintf('PV%i',1:nPS))
+    {
+      pv[[pn]] = sampleNRM2_test(pv[[pn]], b[,b_index], a, fl$first, fl$last)[,1,drop=TRUE]
+      b_index = b_index + bstep
+    }
   }
   
-  pv = select(pv, all_of(covariates), .data$booklet_id,.data$person_id, matches('^PV\\d+$')) %>%
-    rename_with(gsub,pattern='^PV(?=\\d+$)',replacement='PS', perl=TRUE) 
-
+  pv %>%
+    select(-'booklet_score') %>%
+    rename_with(gsub, pattern='^PV(?=\\d+$)',replacement='PS', perl=TRUE)  %>%
+    mutate_if(is.factor, as.character) %>%
+    df_format()
 }
-
 
 

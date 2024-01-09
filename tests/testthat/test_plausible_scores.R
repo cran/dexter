@@ -3,7 +3,7 @@ context('test plausible_scores')
 library(dplyr)
 
 
-
+RcppArmadillo::armadillo_throttle_cores(1)
 
 test_that('plausible scores works',{
   skip_on_cran()
@@ -12,7 +12,7 @@ test_that('plausible scores works',{
   design = data.frame(booklet_id = sort(rep_len(paste0('b',1:5),120)), item_id = paste0('i',1:60), stringsAsFactors = F)
   persons = data.frame(person_id = 1:5000, booklet_id = paste0('b',1:5), stringsAsFactors = F, theta = rnorm(5000))
   responses = persons %>%
-    inner_join(design, by='booklet_id') %>%
+    inner_join(design, by='booklet_id', relationship = "many-to-many") %>%
     inner_join(items, by ='item_id') %>%
     mutate(item_score = as.integer(rlogis(n(), theta-delta) > 0)) %>%
     select(person_id, booklet_id, item_id, item_score)
@@ -24,7 +24,7 @@ test_that('plausible scores works',{
   
   sc_b2 = persons %>%
     mutate(booklet_id = 'b2') %>%
-    inner_join(design, by='booklet_id') %>%
+    inner_join(design, by='booklet_id',relationship = "many-to-many") %>%
     inner_join(items, by ='item_id') %>%
     mutate(item_score = as.integer(rlogis(n(), theta-delta) > 0)) %>%
     group_by(person_id) %>%
@@ -40,11 +40,18 @@ test_that('plausible scores works',{
   # keep.observed should work
   ps = plausible_scores(responses) %>% 
     rename(PS_keep_true = 'PS1') %>%
-    inner_join(plausible_scores(responses, keep.observed = FALSE), by= 'person_id') %>%
-    inner_join(responses %>% group_by(person_id, booklet_id) %>% summarise(booklet_score = sum(item_score)), by='person_id')
+    inner_join(plausible_scores(responses, keep.observed = FALSE), by= c('person_id','booklet_id')) %>%
+    inner_join(responses %>% 
+                 group_by(person_id, booklet_id) %>% 
+                 summarise(booklet_score = sum(item_score)), 
+               by=c('person_id','booklet_id'))
   
   expect_gt(cor(ps$PS_keep_true, ps$booklet_score), cor(ps$PS1, ps$booklet_score)+.05)
   
+  expect_false(any(ps$PS_keep_true<ps$booklet_score))
   
+  expect_lt(abs(mean(ps$PS1)-mean(ps$PS_keep_true)),0.15)
   
 })
+
+RcppArmadillo::armadillo_reset_cores()

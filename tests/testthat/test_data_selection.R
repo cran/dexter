@@ -3,11 +3,8 @@ context('test data selection')
 library(dplyr)
 library(DBI)
 
-# to do: test what happens if integers or factors are used as booklet/perdon/item id's
-
-
-expect_no_error = function(object, info=NULL) expect_error(object, regexp=NA, info=info)
-
+# to do: test what happens if integers or factors are used as booklet/person/item id's
+RcppArmadillo::armadillo_throttle_cores(1)
 
 
 # equivalent
@@ -355,3 +352,6 @@ test_that('variable names cross sql',
   close_project(db)
 
 })
+
+RcppArmadillo::armadillo_reset_cores()
+

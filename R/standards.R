@@ -1,5 +1,4 @@
 
-
 #' Standard setting
 #'
 #' Set performance standards on one or more test forms using the data driven direct consensus (3DC) method
@@ -38,6 +37,8 @@
 #' 
 #' @examples
 #' 
+#' \dontshow{ RcppArmadillo::armadillo_throttle_cores(1)}
+#' 
 #' library(dplyr)
 #' db = start_new_project(verbAggrRules, ":memory:")
 #'             
@@ -55,6 +56,9 @@
 #' 
 #' 
 #' # db_sts = standards_db(sts_par,'test.db',c('mildly aggressive','dangerously aggressive'))
+#' 
+#' \dontshow{ RcppArmadillo::armadillo_reset_cores()}
+#' 
 standards_3dc = function(parms, design)
 {
   
@@ -86,8 +90,7 @@ standards_3dc = function(parms, design)
   {
       es = expected_score(parms, items=tds$item_id)
       
-      select(tds, booklet_id='cluster_id', .data$item_id) %>%
-        ability_tables(parms, design = ., standard_errors=FALSE) %>%
+      ability_tables(parms, design = select(tds, booklet_id='cluster_id', 'item_id')) %>%
         rename(cluster_id='booklet_id', cluster_score='booklet_score') %>%
         mutate(booklet_score = es(.data$theta)) %>%
         inner_join(distinct(tds, .data$cluster_nbr, .data$cluster_id), by='cluster_id')
@@ -200,7 +203,7 @@ standards_db = function(par.sts, file_name, standards, population=NULL, group_le
       dbExecute(db3dc, 
               "INSERT INTO Population(test_id,test_score,test_score_frequency) 
                 VALUES(:booklet_id, :booklet_score, :n);",
-                select(population, .data$booklet_id, .data$booklet_score, .data$n))
+                select(population, 'booklet_id', 'booklet_score', 'n'))
     } 
   }, on_error=function(e){
     dbDisconnect(db3dc); file.remove(file_name); stop(e)})

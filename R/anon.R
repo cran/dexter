@@ -30,22 +30,6 @@ IJ_ = function(b, a, first, last, theta, log=FALSE)
 }
 
 
-# simulate test-scores rather then response patterns. Adapted for inclusion zero
-rscore = function(theta,b,a,first,last, cntr=NULL, use_b_matrix=FALSE)
-{
-  if(use_b_matrix)
-  {
-    if(is.null(cntr)) stop('use_b_matrix is true, need a counter')
-    b = b[cntr(),]
-  }
-  first = as.integer(first-1L)
-  last = as.integer(last-1L)
-  a = as.integer(a)
-  
-  sampleNRM2_test(theta, b, a, first, last)[,1,drop=TRUE]
-
-}
-
 rscore_item = function(theta,b,a,first,last)
 {
   first = as.integer(first-1L)
@@ -119,7 +103,7 @@ possible_scores = function(a, first, last)
   drop(possible_scores_C(as.integer(a), as.integer(first-1L), as.integer(last-1L)))
 
 
-theta_MLE <- function(b,a,first,last, se=FALSE)
+theta_MLE = function(b,a,first,last, se=FALSE)
 {
   a = as.integer(a)
   theta = theta_mle_sec(b, a, as.integer(first-1L), as.integer(last-1L))[,1,drop=TRUE]
@@ -135,7 +119,7 @@ theta_MLE <- function(b,a,first,last, se=FALSE)
   return(list(theta = c(-Inf,theta,Inf), se=sem))
 }
 
-theta_WLE <- function(b,a,first,last, se=FALSE)
+theta_WLE = function(b,a,first,last, se=FALSE)
 {
   a = as.integer(a)
   theta = theta_wle_sec(b, a, as.integer(first-1L), as.integer(last-1L))[,1,drop=TRUE]
@@ -181,7 +165,7 @@ theta_EAP_GH = function(b, a, first,last, se=TRUE, mu=0, sigma=4)
   nodes = quadpoints$nodes * sigma + mu
   weights = quadpoints$weights
   ps = t(pscore(nodes,b,a,first,last))
-  theta_EAP_GH_c(ps,nodes,weights)
+  lapply(theta_EAP_GH_c(ps,nodes,weights), drop)
 }
 
 

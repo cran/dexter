@@ -83,7 +83,8 @@ get_resp_data = function(dataSrc, qtpredicate=NULL,
       stop("predicates don't work in combination with dx_resp_data object yet")
     
     return(resp_data.from_resp_data(dataSrc, extra_columns=extra_columns, summarised=summarised, 
-                                    protect_x=protect_x,merge_within_persons = merge_within_persons))
+                                    protect_x=protect_x,merge_within_persons = merge_within_persons,
+                                    parms_check=parms_check))
   }
   if(!is.null(extra_columns))
   {
@@ -140,6 +141,7 @@ get_resp_data = function(dataSrc, qtpredicate=NULL,
   
   booklet_safe = is_bkl_safe(dataSrc, qtpredicate, env) 
   
+  ncores = get_ncores(16L)
 
   # special case that can be done much faster
   # merge_within person could be accomodated, seems not much use though if we lose booklet id
@@ -167,7 +169,7 @@ get_resp_data = function(dataSrc, qtpredicate=NULL,
     
     if(!is.null(parms_check))
     {
-      # is inputs$ssIS a superset of the items and scores that were used to generate the parms?
+      # is item_id,item_score a superset of the items and scores in the data?
       
       # parms can be generated in weird unkown ways
       # we know scoring rules is always a superset of responses in the db, so if parms => rules, we're ok
@@ -285,7 +287,7 @@ get_resp_data = function(dataSrc, qtpredicate=NULL,
         stop_no_param(itm_scr)
     }
     
-    if(!is_person_booklet_sorted(x$booklet_id, x$person_id))
+    if(!is_person_booklet_sorted(x$booklet_id, x$person_id, ncores))
     {
       protect_x = FALSE
       x = arrange(x, .data$person_id, .data$booklet_id) 
@@ -312,7 +314,8 @@ get_resp_data = function(dataSrc, qtpredicate=NULL,
       
       lvls = bmap %>%
         group_by(.data$booklet_id) %>%
-        summarize(lev = paste0('(',paste0(.data$old_booklet_id, collapse=', '),')')) %>%
+        summarise(lev = paste0('(',paste0(.data$old_booklet_id, collapse=', '),')')) %>%
+        ungroup() %>%
         arrange(.data$booklet_id) %>%
         pull('lev')
       
@@ -340,8 +343,15 @@ get_resp_data = function(dataSrc, qtpredicate=NULL,
 
 
 resp_data.from_resp_data = function(rsp, extra_columns=NULL, summarised=FALSE, protect_x=TRUE,
-                                    merge_within_persons = merge_within_persons) 
+                                    merge_within_persons = merge_within_persons, parms_check=NULL) 
 {
+  
+  if(!is.null(parms_check))
+  {
+    suppressWarnings({no_par = dplyr::setdiff(rsp$x[,c('item_id','item_score')], parms_check)})
+    if(nrow(no_par) > 0)
+      stop_no_param(no_par)
+  }
   
   if(merge_within_persons && !rsp$merge_within_persons)
   {
@@ -393,15 +403,24 @@ resp_data.from_df = function(x, extra_columns=NULL, summarised=FALSE,
                              parms_check=NULL) 
 {
   if(NROW(x)==0)
-    stop("no data to analyse")
+    stop_("no data to analyse")
   
   if(!all(c('person_id','item_id','item_score') %in% colnames(x)))
-    stop("data should contain the columns 'item_id','item_score','person_id'")
+    stop_("data should contain the columns 'item_id','item_score','person_id'")
   
   all_columns = intersect(c('person_id','item_id','item_score','booklet_id','item_position', 
                             extra_columns),
                           colnames(x))
   x = x[,all_columns]
+  
+  ncores = get_ncores(16L)
+  
+  if(anyNA(x[,intersect(colnames(x),c('person_id','item_id','item_score','booklet_id'))]))
+  {
+    cnm = intersect(colnames(x),c('person_id','item_id','item_score','booklet_id'))
+    cnm = cnm[sapply(cnm,function(cn) anyNA(x[[cn]]))]
+    stop_(sprintf("column(s) %s in dataSrc contain NA values", paste0('`',cnm,'`',collapse=', ')))
+  }
   
   pointers = lapply(x, ppoint)
   
@@ -430,7 +449,7 @@ resp_data.from_df = function(x, extra_columns=NULL, summarised=FALSE,
     { 
       if(is.unsorted(x$person_id))
         x = arrange(x, .data$person_id) 
-    }else if(!is_person_booklet_sorted(x$booklet_id, x$person_id))
+    }else if(!is_person_booklet_sorted(x$booklet_id, x$person_id, ncores))
     {
       x = arrange(x, .data$person_id, .data$booklet_id)
     }
@@ -573,7 +592,7 @@ resp_data.from_matrix = function(X, summarised = FALSE, retain_person_id = TRUE,
     if(n_distinct(parms_check$item_id) < ncol(X))
       stop("dataSrc contains items that are not present in the item parameters")
     
-    if(!parms_is_superset_matrix(X, parms_check$item_id, parms_check$item_score, maxs))
+    if(!parms_is_superset_matrix(X, parms_check$item_id, parms_check$item_score, maxs, get_ncores(16L)))
       stop("your data contains scores that are not present in the item parameters")
   }
   
@@ -632,7 +651,7 @@ resp_data.from_matrix = function(X, summarised = FALSE, retain_person_id = TRUE,
 
 # ___________________ methods ______________________ #
 
-intersection = function(respData)
+intersection_rd = function(respData)
 {
   
   if(respData$summarised)
@@ -648,7 +667,7 @@ intersection = function(respData)
     if(nrow(items) == 0)
       stop('There are no items in your data that were answered by all respondents')
     
-    respData$design = select(items, -.data$n)
+    respData$design = select(items, -'n')
     
     respData$design$booklet_id = 1L
     class(respData$design$booklet_id) = "factor"
@@ -669,7 +688,7 @@ intersection = function(respData)
 # no protection against making meaningless combinations if more than one booklet!
 # currently removes any other person or item property columns from x
 # to~do: extend to keep person properties for future extended use, accept item property in design or as extra
-polytomize = function(respData, item_property, protect_x=TRUE)
+polytomize_rd = function(respData, item_property, protect_x=TRUE)
 {
   if(!is.factor(respData$x[[item_property]]))
   {
@@ -708,15 +727,13 @@ polytomize = function(respData, item_property, protect_x=TRUE)
 # @parameter predicate statement (raw/unquoted) to filter data, the predicate may only contain columns that appear in both 
 # the design and the data 
 # @parameter .recompute_sumscores shall booklet_scores be recomputed
-filter.dx_resp_data = function(respData, predicate, env=NULL, .recompute_sumscores = FALSE)
+filter_rd = function(respData, predicate, env=NULL, .recompute_sumscores = FALSE)
 {
   if(is.null(env)) env = caller_env()
   qtpredicate = eval(substitute(quote(predicate)))
   
   if(.recompute_sumscores & respData$summarised) 
     stop('cannot recompute booklet_scores on summarised data')
-  
-  respData$filter = c(respData$filter, as.character(qtpredicate))
   
   # this works but not with the .data pronoun unfortunately
   # respData$design = respData$design[with(respData$design, eval(partial_eval(qtpredicate,env=env))),]
@@ -733,12 +750,13 @@ filter.dx_resp_data = function(respData, predicate, env=NULL, .recompute_sumscor
   return(respData)
 }
 
+
 # filter join for a dx_resp_data object similar to a dplyr semi_join statement
 # @parameter respData an object of type dx_resp_data
 # @parameter y tibble for semi_join
 # @parameter by may only contain columns that are present in the design and in the data(x)
 # @parameter .recompute_sumscores shall booklet_scores be recomputed
-semi_join.dx_resp_data = function(respData, y, by, .recompute_sumscores = FALSE)
+semi_join_rd = function(respData, y, by, .recompute_sumscores = FALSE)
 {
   if(.recompute_sumscores && respData$summarised) 
     stop('cannot recompute booklet_scores on summarised data')
@@ -753,12 +771,14 @@ semi_join.dx_resp_data = function(respData, y, by, .recompute_sumscores = FALSE)
   return(respData)
 }
 
+
+
 # filter join for a dx_resp_data object similar to a dplyr semi_join statement
 # @parameter respData an object of type dx_resp_data
 # @parameter y tibble for semi_join
 # @parameter by may only contain columns that are present in the design and in the data(x)
 # @parameter .recompute_sumscores shall booklet_scores be recomputed
-anti_join.dx_resp_data = function(respData, y, by, .recompute_sumscores = FALSE)
+anti_join_rd = function(respData, y, by, .recompute_sumscores = FALSE)
 {
   if(.recompute_sumscores && respData$summarised) 
     stop('cannot recompute booklet_scores on summarised data')
@@ -775,11 +795,15 @@ anti_join.dx_resp_data = function(respData, y, by, .recompute_sumscores = FALSE)
 }
 
 
+
+
 # to do: this should create new test scores if INDICES is an item property, no?
+# --> true but not urgent since it is not used that way anywhere
+
 # INDICES must be one string that indicates column in respData$x
 # assumed that the operation is booklet_safe in the sense that it does not create more booklets
 # in subgroups
-by.dx_resp_data = function (data, INDICES, FUN, ..., simplify = TRUE) 
+by_rd = function (data, INDICES, FUN, ..., simplify = TRUE) 
 {
   smr = data$summarised
   args = list(...)

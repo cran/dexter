@@ -3,7 +3,7 @@ context('check latent correlations')
 library(dplyr)
 library(tidyr)
 
-
+RcppArmadillo::armadillo_throttle_cores(1)
 
 test_that('latent correlations work',{
   
@@ -14,7 +14,7 @@ test_that('latent correlations work',{
     group_by(person_id,behavior) %>%
     summarise(score=sum(item_score)) %>%
     ungroup() %>%
-    spread(behavior,score)
+    pivot_wider(names_from=behavior, values_from=score)
     
   xcor = cor(select(x,-person_id))
   ut = upper.tri(lt$cor)
@@ -29,3 +29,6 @@ test_that('latent correlations work',{
   
   #to do: incomplete designs
 })
+
+RcppArmadillo::armadillo_reset_cores()
+

@@ -1,6 +1,6 @@
 ## ----setup, include=FALSE-----------------------------------------------------
 library(knitr)
-opts_chunk$set(echo = TRUE,fig.align='center', fig.width=6, fig.height=5)
+opts_chunk$set(echo = TRUE,fig.align='center', fig.width=6, fig.height=5, message = FALSE)
 
 if (requireNamespace("Cairo", quietly = TRUE)) 
 {
@@ -16,16 +16,17 @@ par_hook = function(before, options, envir)
 }
 knit_hooks$set(par = par_hook)
 
+RcppArmadillo::armadillo_throttle_cores(1)
 
-## ---- message=FALSE-----------------------------------------------------------
+## -----------------------------------------------------------------------------
 library(dplyr)
 library(dexter)
 head(verbAggrRules, 10)
 
-## ---- eval=FALSE--------------------------------------------------------------
+## ----eval=FALSE---------------------------------------------------------------
 #  db = start_new_project(verbAggrRules, "verbAggression.db", person_properties=list(gender="unknown"))
 
-## ---- include=FALSE-----------------------------------------------------------
+## ----include=FALSE------------------------------------------------------------
 db = start_new_project(verbAggrRules, ":memory:", person_properties=list(gender="unknown"))
 
 ## -----------------------------------------------------------------------------
@@ -46,16 +47,16 @@ get_persons(db) %>%
 ## -----------------------------------------------------------------------------
 tt = tia_tables(db)
 
-## ---- eval=FALSE--------------------------------------------------------------
+## ----eval=FALSE---------------------------------------------------------------
 #  tt$booklets
 
-## ---- echo=FALSE--------------------------------------------------------------
+## ----echo=FALSE---------------------------------------------------------------
 kable(tt$booklets, digits=3)
 
-## ---- eval=FALSE--------------------------------------------------------------
+## ----eval=FALSE---------------------------------------------------------------
 #  tt$items
 
-## ---- echo=FALSE--------------------------------------------------------------
+## ----echo=FALSE---------------------------------------------------------------
 kable(tt$items, digits=3)
 
 ## -----------------------------------------------------------------------------
@@ -72,30 +73,32 @@ plot(m, 'S1DoCurse', summate=FALSE)
 mSit = fit_domains(db, item_property= "situation")
 plot(mSit)
 
-## ---- results='hide'----------------------------------------------------------
+## ----results='hide'-----------------------------------------------------------
 parms = fit_enorm(db)
 
-## ---- results='hide'----------------------------------------------------------
+## ----results='hide'-----------------------------------------------------------
 parms_gibbs = fit_enorm(db, method='Bayes')
 
-## ---- eval=F------------------------------------------------------------------
+## ----eval=F-------------------------------------------------------------------
 #  head(coef(parms_gibbs))
 
-## ---- echo=F------------------------------------------------------------------
+## ----echo=FALSE---------------------------------------------------------------
 kable(head(coef(parms_gibbs)), digits=3)
 
 ## -----------------------------------------------------------------------------
 pv = plausible_values(db, parms)
 plot(density(pv$PV1), bty='l', main='verbal aggression', xlab='plausible value')
 
-## ---- par=list(bty='n', fg='white')-------------------------------------------
+## ----par=list(bty='n', fg='white')--------------------------------------------
 pv = merge(pv, get_persons(db))
 
 boxplot(PV1~gender, data=pv, border='black')
 
-## ---- fig.width=5, fig.height=5-----------------------------------------------
+## ----fig.width=5, fig.height=5------------------------------------------------
 profile_plot(db, item_property='mode', covariate='gender')
 
 ## -----------------------------------------------------------------------------
 close_project(db)
+
+RcppArmadillo::armadillo_reset_cores()
 

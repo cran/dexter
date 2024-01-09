@@ -10,8 +10,8 @@ plausible_values(
   predicate = NULL,
   covariates = NULL,
   nPV = 1,
-  use_draw = NULL,
-  prior.dist = c("normal", "mixture"),
+  parms_draw = c("sample", "average"),
+  prior_dist = c("normal", "mixture"),
   merge_within_persons = FALSE
 )
 }
@@ -19,7 +19,7 @@ plausible_values(
 \item{dataSrc}{a connection to a dexter database, a matrix, or a data.frame with columns: person_id, item_id, item_score}
 
 \item{parms}{An object returned by function \code{fit_enorm} containing parameter estimates. If parms are provided, item parameters are considered known. 
-If parms = NULL, plausible values are marginalized over the posterior distribution of the item parameters and uncertainty of the item parameters is taken into account.}
+If parms = NULL, they will be estimated Bayesianly.}
 
 \item{predicate}{an expression to filter data. If missing, the function will use 
 all data in dataSrc}
@@ -30,21 +30,35 @@ If dataSrc is a data.frame, it must contain the covariate.}
 
 \item{nPV}{Number of plausible values to draw per person.}
 
-\item{use_draw}{When the ENORM was fitted with a Gibbs sampler, this specifies the use of a particular sample of item parameters used to generate the plausible value(s). If NULL, the posterior means are used. If outside range, the last iteration will be used.}
+\item{parms_draw}{when the item parameters are estimated Bayesianly (see: \code{\link{fit_enorm}}), 
+parms_draw specifies whether to use a sample(a different item parameter draw for each plausible values draw) or the posterior mean
+of the item draws. Alternatively, it can be an integer specifying a specific draw. Ignored when parms is not estimated Bayesianly.}
 
-\item{prior.dist}{use a normal prior or a mixture of two normals}
+\item{prior_dist}{use a normal prior for the plausible values or a mixture of two normals. 
+A mixture is only possible when there are no covariates.}
 
 \item{merge_within_persons}{If a person took multiple booklets, this indicates
 whether plausible values are generated per person (TRUE) or per booklet (FALSE)}
 }
 \value{
-A data.frame with columns booklet_id, person_id, booklet_score and nPV plausible values
+A data.frame with columns booklet_id, person_id, booklet_score, any covariate columns, and nPV plausible values
 named PV1...PVn.
 }
 \description{
 Draws plausible values based on test scores
 }
+\details{
+When the item parameters are estimated using \code{fit_enorm(..., method='Bayes')} and parms_draw = 'sample', the uncertainty 
+of the item parameters estimates is taken into account when drawing multiple plausible values. 
+
+In there are covariates, the prior distribution is a hierarchical normal with equal variances across groups. When there is only
+one group this becomes a regular normal distribution. When there are no covariates and prior_dist = "mixture", the prior is a mixture
+distribution of two normal distributions which gives a little more flexibility than a normal prior.
+}
 \examples{
+
+\dontshow{ RcppArmadillo::armadillo_throttle_cores(1)}
+
 db = start_new_project(verbAggrRules, ":memory:", 
    person_properties=list(gender="<unknown>"))
 add_booklet(db, verbAggrData, "agg")
@@ -71,7 +85,10 @@ lines(ecdf(pv_F$PV1),col="green")
 legend(-2.2,0.9, c("female", "male") , 
    lty=1, col=c('green', 'red'), bty='n', cex=.75)
    
+   
 close_project(db)    
+
+\dontshow{ RcppArmadillo::armadillo_reset_cores()}
 
 }
 \references{
