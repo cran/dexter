@@ -40,7 +40,7 @@ text(-1.3,0,"Females", pos=2, xpd=NA)
 plot(dif_gender)
 
 ## ----sorting, fig.align='center'----------------------------------------------
-items = get_items(db) %>%
+items = get_items(db) |>
   arrange(mode, item_id)
   
 plot(dif_gender, items=items$item_id)

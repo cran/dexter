@@ -59,8 +59,8 @@ text(1,1-rg/2,'TPR',cex=.6)
 library(dexter)
 db = start_new_project(verbAggrRules, ":memory:")
 add_booklet(db, verbAggrData, "data")
-ts = get_testscores(db, item_position<15) %>%
-  inner_join(get_testscores(db, item_position>=15), by='person_id') %>%
+ts = get_testscores(db, item_position<15) |>
+  inner_join(get_testscores(db, item_position>=15), by='person_id') |>
   rename(ref_test= 'booklet_score.y', new_test = 'booklet_score.x')
 #plot(ts$new_test, ts$ref_test, ylab="ref. test score", xlab="new test score", cex=0.8, pch=16)
 #abline(h=10, lty=2, col="green")
