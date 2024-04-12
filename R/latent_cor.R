@@ -1,8 +1,8 @@
 
 #' Latent correlations
 #'
-#' Estimates correlations between latent traits. Use an item_property to distinguish the different scales. 
-#' This function uses plausible values so results may differ slightly between calls. 
+#' Estimates correlations between latent traits using plausible values as described in Marsman, et al. (2022). 
+#' An item_property is used to distinguish the different scales. 
 #'
 #' @param dataSrc A connection to a dexter database or a data.frame with columns: person_id, item_id, item_score and 
 #' the item_property
@@ -14,9 +14,14 @@
 #' @param hpd width of Bayesian highest posterior density interval around the correlations, 
 #'  value must be between 0 and 1.
 #' @param use Only complete.obs at this time. Respondents who don't have a score for one or more scales are removed.
-#' 
 #' @return List containing a estimated correlation matrix, the corresponding standard deviations, 
 #' and the lower and upper limits of the highest posterior density interval
+#' @details
+#' This function uses plausible values so results may differ slightly between calls. 
+#' 
+#' @references 
+#' Marsman, M., Bechger, T. M., & Maris, G. K. (2022). Composition algorithms for conditional distributions. 
+#' In Essays on Contemporary Psychometrics (pp. 219-250). Cham: Springer International Publishing.
 #' 
 latent_cor = function(dataSrc, item_property, predicate=NULL, nDraws=500, hpd=0.95, use="complete.obs")
 {
@@ -58,18 +63,25 @@ latent_cor = function(dataSrc, item_property, predicate=NULL, nDraws=500, hpd=0.
   
   pb$set_nsteps(nIter + 4*nd)
   
-  respData$x = respData$x |>
-    group_by(.data$person_id) |>
-    filter(nd == n_distinct(.data[[item_property]])) |>
-    ungroup()
+  # this assumes merge over booklets
+  persons = respData$x |>
+    distinct(.data$person_id, .data[[item_property]]) |>
+    count(.data$person_id)
   
-  respData$x$person_id = ffactor(respData$x$person_id,as_int=TRUE)
+  persons = persons |>
+    filter(.data$n==nd) |>
+    mutate(new_person_id = dense_rank(.data$person_id)) |>
+    select('person_id','new_person_id')
   
+  np = nrow(persons)
+
+  if(np==0) stop_("There are no persons that have scores for every subscale.") 
   
-  np = max(respData$x$person_id)
   respData = lapply(split(respData$x, respData$x[[item_property]]), get_resp_data)
+  
   models = lapply(respData, function(x){try(fit_enorm(x), silent=TRUE)})
-  names(models)=names(respData)
+  names(models) = names(respData)
+  
   if(any(sapply(models,inherits,what='try-error')))
   {
     message('\nThe model could not be estimated for one or more item properties, reasons:')
@@ -78,6 +90,17 @@ latent_cor = function(dataSrc, item_property, predicate=NULL, nDraws=500, hpd=0.
                      result=gsub('^.+try\\(\\{ *:','',trimws(as.character(models)))))
     stop('Some models could not be estimated')
   }
+  
+  for(i in seq_along(respData))
+  {
+    respData[[i]] = get_resp_data(respData[[i]], summarised=TRUE)
+      
+    respData[[i]]$x = respData[[i]]$x |> 
+      inner_join(persons,by='person_id') |>
+      select(-'person_id') |>
+      rename(person_id='new_person_id')
+  }
+  
   
   abl = mapply(ability, respData, models, SIMPLIFY=FALSE,
                MoreArgs = list(method="EAP", prior="Jeffreys"))

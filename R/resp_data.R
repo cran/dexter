@@ -76,6 +76,14 @@ get_resp_data = function(dataSrc, qtpredicate=NULL,
                          parms_check=NULL,
                          raw=FALSE)
 {
+  if(!is.null(extra_columns))
+  {
+    extra_columns = extra_columns[!extra_columns %in% c('person_id','item_id','item_score')]
+    
+    if(!raw) extra_columns = extra_columns[extra_columns != 'booklet_id']
+    
+    if(length(extra_columns)==0) extra_columns=NULL
+  }
 
   if(inherits(dataSrc,'dx_resp_data'))
   {
@@ -348,10 +356,19 @@ resp_data.from_resp_data = function(rsp, extra_columns=NULL, summarised=FALSE, p
   
   if(!is.null(parms_check))
   {
-    suppressWarnings({no_par = dplyr::setdiff(rsp$x[,c('item_id','item_score')], parms_check)})
+    if(summarised && rsp$summarised)
+    {
+      no_par = tibble(item_id=setdiff(rsp$design$item_id,parms_check$item_id))
+    } else
+    {
+      suppressWarnings({no_par = dplyr::setdiff(rsp$x[,c('item_id','item_score')], parms_check)})
+    }
+    
     if(nrow(no_par) > 0)
       stop_no_param(no_par)
   }
+  
+  
   
   if(merge_within_persons && !rsp$merge_within_persons)
   {
