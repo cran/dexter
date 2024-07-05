@@ -14,6 +14,7 @@ plausible_scores(
   nPS = 1,
   prior_dist = c("normal", "mixture"),
   keep.observed = TRUE,
+  by_item = FALSE,
   merge_within_persons = FALSE
 )
 }
@@ -35,7 +36,7 @@ parms_draw specifies whether to use a sample(a different item parameter draw for
 of the item draws. Alternatively, it can be an integer specifying a specific draw. Ignored when parms is not estimated Bayesianly.}
 
 \item{covariates}{name or a vector of names of the variables to group the population, used to update the prior.
-A covariate must be a discrete person covariate (e.g. not a float) that indicates nominal categories, e.g. gender or school
+A covariate must be a discrete person covariate that indicates nominal categories, e.g. gender or school
 If dataSrc is a data.frame, it must contain the covariate.}
 
 \item{nPS}{Number of plausible testscores to generate per person.}
@@ -45,6 +46,8 @@ A mixture is only possible when there are no covariates.}
 
 \item{keep.observed}{If responses to one or more of the items have been observed,
 the user can choose to keep these observations or generate new ones.}
+
+\item{by_item}{return scores per item instead of sumscores}
 
 \item{merge_within_persons}{If a person took multiple booklets, this indicates
 whether plausible scores are generated per person (TRUE) or per booklet (FALSE)}

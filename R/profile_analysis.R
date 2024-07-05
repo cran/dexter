@@ -43,26 +43,27 @@ profile_tables_ = function(items, a, b, design, domains, item_property)
 {
   design = design |> 
     inner_join(domains[,c('item_id',item_property)], by='item_id') |>
-    mutate(dcat = dense_rank(.data[[item_property]]))
+    mutate(dcat = dense_rank(.data[[item_property]])) |>
+    arrange(.data$booklet_id, .data$dcat, .data$item_id) 
   
-  dcat = distinct(design, .data[[item_property]], dcat )
+  domain_category_index = distinct(design, .data[[item_property]], .data$dcat )
   
   design |>
     group_by(.data$booklet_id) |>
     do({
       prof_lmx = E_profile(b,a,.$first,.$last, split(1:nrow(.), .$dcat))
-      
+      dcat_bk = sort(unique(.$dcat))
       lapply(prof_lmx, function(mtx)
       {
-        tibble(dcat=1:ncol(mtx), expected_domain_score = mtx[1,] )}
+        tibble(dcat=dcat_bk, expected_domain_score = mtx[1,] )}
       ) |>
         bind_rows(.id='booklet_score') |>
         mutate(booklet_score = as.integer(.data$booklet_score)-1L) |>
-        inner_join(dcat, by='dcat')
+        inner_join(domain_category_index, by='dcat')
       
     }) |>
     ungroup() |>
-    select(-dcat)
+    select(-'dcat')
 }
 
 # to~do: example
@@ -177,7 +178,7 @@ profiles = function(dataSrc, parms, item_property, predicate=NULL, merge_within_
 
 # first and last are reduced to only the items occurring in A
 # NA categories can be applied by removing them from A as well as first and last
-E_profile = function(b, a, first, last, A, cIM=NULL)
+E_profile = function(b, a, first, last, A, cIM_score=NULL)
 {
   nSub = length(A)
   
@@ -189,8 +190,8 @@ E_profile = function(b, a, first, last, A, cIM=NULL)
   E = matrix(0, nSub, Msc+1)
   for (j in 1:nSub)
   {
-    hh = SSTable(b, a, first, last, AB=list(A[[j]], setdiff(items, A[[j]])), cIM=cIM)
-      
+    hh = SSTable(b, a, first, last,setA=A[[j]],setB=setdiff(items, A[[j]]), cIM_score=cIM_score)
+
     Msc_sub[j] = nrow(hh) - 1L
     for (i in 1:nrow(hh))
     {
@@ -212,6 +213,7 @@ E_profile = function(b, a, first, last, A, cIM=NULL)
   
   Etab
 }
+
 
 
 # Chi-square disctance between observed and expected
