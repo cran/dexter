@@ -15,7 +15,7 @@
 #'  value must be between 0 and 1.
 #' @param use Only complete.obs at this time. Respondents who don't have a score for one or more scales are removed.
 #' @return List containing a estimated correlation matrix, the corresponding standard deviations, 
-#' and the lower and upper limits of the highest posterior density interval
+#' and the lower and upper limits of the highest posterior density interval and the complete mcmc sample
 #' @details
 #' This function uses plausible values so results may differ slightly between calls. 
 #' 
@@ -40,10 +40,10 @@ latent_cor = function(dataSrc, item_property, predicate=NULL, nDraws=500, hpd=0.
   pb = get_prog_bar(nDraws, retrieve_data = is_db(dataSrc), lock=TRUE)
   on.exit({pb$close()})
   
-  from = 5
-  by = 2
+  from = 50L
+  by = 2L
   which.keep = seq(from,(from-by)*(from>by)+by*nDraws,by=by)
-  nIter=max(which.keep)
+  nIter = max(which.keep)
   
   if(is.matrix(dataSrc))
   {
@@ -52,7 +52,7 @@ latent_cor = function(dataSrc, item_property, predicate=NULL, nDraws=500, hpd=0.
   # merge_within_persons might also be user set. But TRUE will be the most useful in nearly all cases
   
   respData = get_resp_data(dataSrc, qtpredicate, env=env, extra_columns=item_property,
-                           merge_within_persons=TRUE)
+    merge_within_persons=TRUE)
   
   respData$x[[item_property]] = ffactor(as.character(respData$x[[item_property]]))
   lvl = levels(respData$x[[item_property]])
@@ -71,7 +71,7 @@ latent_cor = function(dataSrc, item_property, predicate=NULL, nDraws=500, hpd=0.
     select('person_id','new_person_id')
   
   np = nrow(persons)
-
+  
   if(np==0) stop_("There are no persons that have scores for every subscale.") 
   
   respData = lapply(split(respData$x, respData$x[[item_property]]), get_resp_data)
@@ -84,39 +84,28 @@ latent_cor = function(dataSrc, item_property, predicate=NULL, nDraws=500, hpd=0.
     message('\nThe model could not be estimated for one or more item properties, reasons:')
     models[!sapply(models,inherits,what='try-error')] = 'OK'
     print(data.frame(item_property=names(models), 
-                     result=gsub('^.+try\\(\\{ *:','',trimws(as.character(models)))))
+      result=gsub('^.+try\\(\\{ *:','',trimws(as.character(models)))))
     stop('Some models could not be estimated')
   }
   
   for(i in seq_along(respData))
   {
     respData[[i]] = get_resp_data(respData[[i]], summarised=TRUE)
-      
+    
     respData[[i]]$x = respData[[i]]$x |> 
       inner_join(persons,by='person_id') |>
       select(-'person_id') |>
       rename(person_id='new_person_id')
   }
   
-  
-  abl = mapply(ability, respData, models, SIMPLIFY=FALSE,
-               MoreArgs = list(method="EAP", prior="Jeffreys"))
-  
   pb$tick(2*nd)
   
-  # some matrices
-  # we cannot rely on order in ability so this is the way for now
-  abl_mat = matrix(NA_real_,np,nd)
-  for(d in 1:nd)
-    abl_mat[abl[[d]]$person_id,d] = abl[[d]]$theta
-  
-  
-  acor = cor(abl_mat,use=use)
   pv = matrix(0,np,nd)
   
   reliab = rep(0,nd)
   sd_pv = rep(0,nd)
   mean_pv = rep(0,nd)
+  
   for (i in 1:nd)
   {
     pvs = plausible_values(respData[[i]],models[[i]],nPV = 2)
@@ -127,6 +116,8 @@ latent_cor = function(dataSrc, item_property, predicate=NULL, nDraws=500, hpd=0.
   }
   pb$tick(2*nd)
   
+  acor = cor(pv)
+  # attenuation correction
   for (i in 1:(nd-1))
   {
     for (j in ((i+1):nd)){
@@ -134,14 +125,15 @@ latent_cor = function(dataSrc, item_property, predicate=NULL, nDraws=500, hpd=0.
       acor[j,i] = acor[i,j]
     }
   }
-  
-  out_sd=matrix(0,nd,nd)
-  out_cor = acor
+  # ignore attenuation if result is invalid
+  if(any(abs(acor)>1))
+    acor = cor(pv)
   
   # make everything simple and zero indexed
-  # parms = cml
+  
   models = lapply(models, simplify_parms)
   respData = lapply(respData, get_resp_data, summarised=TRUE)
+  
   for(d in 1:nd)
   {
     respData[[d]]$x$booklet_id = as.integer(respData[[d]]$x$booklet_id) - 1L
@@ -150,7 +142,7 @@ latent_cor = function(dataSrc, item_property, predicate=NULL, nDraws=500, hpd=0.
   
   prior = list(mu=mean_pv, Sigma = diag(1.7*sd_pv) %*% acor %*% diag(1.7*sd_pv))
   
-  store = matrix(0, length(which.keep), length(as.vector(prior$Sigma)))
+  mcmc = array(0, dim = c(length(which.keep), nd, nd))
   tel = 1
   
   max_cores = get_ncores(desired = 128L, maintain_free = 1L)
@@ -158,85 +150,141 @@ latent_cor = function(dataSrc, item_property, predicate=NULL, nDraws=500, hpd=0.
   {
     for (d in 1:nd)
     {
-      cons = condMoments(prior$mu, prior$Sigma, d, x.value=pv[,-d]) 
+      cons = condMoments(mu = prior$mu, sigma = prior$Sigma, index=d, value=pv) 
       
       PV_sve(models[[d]]$b, models[[d]]$a, models[[d]]$design$first0, models[[d]]$design$last0, 					
-             models[[d]]$bcni,
-             respData[[d]]$x$booklet_id, respData[[d]]$x$booklet_score, cons$mu, sqrt(cons$sigma),
-             max_cores,
-             pv,d-1L, 10L)
+        models[[d]]$bcni,
+        respData[[d]]$x$booklet_id, respData[[d]]$x$booklet_score, cons$mu, sqrt(cons$sigma),
+        max_cores,
+        pv,d-1L, 10L)
     }
-    
     
     prior = update_MVNprior(pv,prior$Sigma)
     
     if (i %in% which.keep){
-      store[tel,] = as.vector(cov2cor(prior$Sigma))
-      tel=tel+1
+      mcmc[tel,,] = cov2cor(prior$Sigma)
+      tel = tel+1L
     }
     pb$tick()
   }
-  out_sd = matrix(apply(store,2,sd),nd,nd)
-  diag(out_sd)=0
-  pd = t(apply(store,2,hpdens, conf=hpd))
-  res = list(cor = matrix(colMeans(store),nd,nd), sd = out_sd,
-             hpd_l = matrix(pd[,1], nd, nd), hpd_h = matrix(pd[,2], nd, nd))
+  
+  hp = apply(mcmc,2:3,hpdens)
+  
+  res = list(cor = apply(mcmc,2:3,mean), sd = apply(mcmc,2:3,sd),
+    hpd_l = hp[1,,], hpd_h = hp[2,,])
   
   res = lapply(res, function(x){colnames(x) = rownames(x) = names(models); x})
   res$n_persons = np
+  res$mcmc = mcmc
   res
 }
 
-
-# mean and variance of Y|x if x,y is multivariate normal
-#
-# with mean mu and variance-covariance matrix sigma
-# @param m vector of means
-# @param sigma covariance matrix
-# @param y.ind indices dependent variable(s)
-# @param x.ind indices conditioning variables. If null its just all others
-# @param x.value value of conditioning variables
-# 
-condMoments = function(mu, sigma, y.ind, x.ind=NULL, x.value )
-{
-  if (is.null(x.ind)) x.ind = setdiff(1:length(mu), y.ind)
-  B = sigma[y.ind, y.ind]
-  C = sigma[y.ind, x.ind, drop = FALSE]
-  D = sigma[x.ind, x.ind]
-  CDinv = C %*% solve(D)
-  if (is.vector(x.value))
-  {
-    cMu = c(mu[y.ind] + CDinv %*% (x.value - mu[x.ind]))
-  }else
-  {
-    nP = nrow(x.value)
-    cMu = rep(0,nP)
-    for (i in 1:nP) cMu[i] = mu[y.ind] + CDinv %*% (x.value[i,] - mu[x.ind])
-  }
-  cVar = B - CDinv %*% t(C)
-  return(list(mu=cMu, sigma=cVar))
-}
-
+# robust for not entirely positive definite matrix V
 update_MVNprior = function(pvs,Sigma)
 {
   m_pv = colMeans(pvs)
   nP = nrow(pvs)
-  mu = rmvnorm(1, mean=m_pv,sigma=Sigma/nP)
+  mu = rmvnorm(1, mu=m_pv, sigma=Sigma/nP)
   
-  S=(t(pvs)-m_pv)%*%t(t(pvs)-m_pv)
-  Sigma = solve(rWishart(1,nP-1,solve(S))[,,1]) 
+  pvs = sapply(1:ncol(pvs),\(i) pvs[,i] - m_pv[i])
+  S = t(pvs) %*% pvs
+
+  V = solve(S)
+  
+  Sigma = try({solve(rWishart(1,nP-1,V)[,,1])}, silent=TRUE)
+  if(inherits(Sigma,'try-error'))
+  {
+    V = nearPD(V)
+    Sigma = solve(rWishart(1,nP-1,V)[,,1])
+  }   
   return(list(mu = mu, Sigma = Sigma))
 }
 
+# mean and variance of Y given values for x
+# near zero/negative variances can occur,  meaningfull error message?
 
-# borrowed the following from mvtnorm source for the time being
-# so we don't have to import a whole package
-rmvnorm = function(n,mean,sigma)
+condMoments = function(mu, sigma, index, value )
+{
+  C = sigma[index,-index,drop=FALSE]
+  D = sigma[-index,-index]
+  CDinv = C %*% solve(D)
+  
+  mu_y = apply(value[,-index,drop=FALSE],1, `-`, mu[-index])
+  
+  if(is.null(dim(mu_y)))
+  {
+    mu_y = (CDinv %*% mu_y) + mu[index]
+  } else
+  {
+    mu_y = apply(mu_y,2,\(x) CDinv %*% x) + mu[index]
+  }
+
+  return(list(mu=mu_y, sigma = sigma[index,index] - CDinv %*% t(C)))
+}
+
+
+# somewhat simplified, from the Matrix package
+# Jens Oehlschlägel and Matrix package authors
+# used in edge case in pudate mvn prior
+nearPD = function (x,  eig.tol = 1e-06, conv.tol = 1e-07, posd.tol = 1e-08, maxit = 50L) 
+{
+  if (!isSymmetric(x)) {
+    x = (x + t(x))/2 
+  }
+  
+  n = ncol(x)
+  
+  D_S = x
+  D_S[] = 0
+  
+  X = x
+  iter = 0L
+  converged = FALSE
+  conv = Inf
+  while (iter < maxit && !converged) {
+    Y = X
+    
+    R = Y - D_S
+    e = eigen(R)
+    Q = e$vectors
+    d = e$values
+    p = d > eig.tol * d[1]
+    if (!any(p)) 
+      stop("Matrix seems negative semi-definite")
+    Q = Q[, p, drop = FALSE]
+    X = tcrossprod(Q * rep(d[p], each = nrow(Q)), Q)
+    
+    D_S = X - R
+    
+    conv = norm(Y - X, "I")/norm(Y, "I")
+    iter = iter + 1L
+    
+    converged = (conv <= conv.tol)
+  }
+  
+  e = eigen(X, symmetric = TRUE)
+  d = e$values
+  Eps = posd.tol * abs(d[1])
+  if (d[n] < Eps) {
+    d[d < Eps] = Eps
+    
+    Q = e$vectors
+    o.diag = diag(X)
+    X = Q %*% (d * t(Q))
+    D = sqrt(pmax(Eps, o.diag)/diag(X))
+    X[] = D * X * rep(D, each = n)
+  }
+  
+  X
+}
+
+
+rmvnorm = function(n, mu, sigma)
 {
   ev = eigen(sigma, symmetric = TRUE)
   R = t(ev$vectors %*% (t(ev$vectors) * sqrt(pmax(ev$values, 0))))
-  retval = matrix(rnorm(n * ncol(sigma)), nrow = n, byrow = TRUE) %*% R
-  retval = sweep(retval, 2, mean, "+")
-  colnames(retval) = names(mean)
-  retval
+  res = matrix(rnorm(n * ncol(sigma)), nrow = n, byrow = TRUE) %*% R
+  res = sweep(res, 2, mu, "+")
+  colnames(res) = names(mu)
+  res
 }

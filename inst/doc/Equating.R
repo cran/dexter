@@ -55,15 +55,17 @@ CurlyBraces(x=0, y=1-rg/2, range=rg, dir=1)
 text(1,1-rg/2,'TPR',cex=.6)
 
 
-## ----echo=FALSE, message=FALSE, results='hide', fig.align='center', fig.height=4, fig.width=4----
+## ----echo=TRUE,  results='hide', fig.align='center', fig.height=4, fig.width=4----
 library(dexter)
+
 db = start_new_project(verbAggrRules, ":memory:")
 add_booklet(db, verbAggrData, "data")
-ts = get_testscores(db, item_position<15) |>
-  inner_join(get_testscores(db, item_position>=15), by='person_id') |>
+
+ts = get_testscores(db, item_position < 15) |>
+  inner_join(get_testscores(db, item_position >= 15), by='person_id') |>
   rename(ref_test= 'booklet_score.y', new_test = 'booklet_score.x')
-#plot(ts$new_test, ts$ref_test, ylab="ref. test score", xlab="new test score", cex=0.8, pch=16)
-#abline(h=10, lty=2, col="green")
+
+
 ggplot(ts, aes(x = new_test, y = ref_test)) +
   geom_count(show.legend = F) +
   geom_hline(yintercept = 10, colour = 'green') +
@@ -73,20 +75,28 @@ ggplot(ts, aes(x = new_test, y = ref_test)) +
 
 ## ----fig.align='center', fig.height=5, fig.width=5----------------------------
 prob_pass = tp = rep(0,29)
-for (i in seq_along(0:28)){
+
+for (i in seq_along(0:28))
+{
   prob_pass[i] = sum(ts$ref_test[ts$new_test==i]>=10) / sum(ts$new_test==i)
   tp[i] = sum(ts$ref_test[ts$new_test>=i]>=10) / sum(ts$new_test>=i)
 }
-plot(0:28, prob_pass, ylab="Proportion passing the reference test", xlab="New test score", ylim=c(0,1), type = "o", col="red",bty='l')
+
+plot(0:28, prob_pass, ylab="Proportion passing the reference test", xlab="New test score", 
+     ylim=c(0,1), type = "o", col="red",bty='l')
 lines(0:28, tp, type="o", lty=2, col="blue")
 
 ## ----fig.align='center', fig.height=5, fig.width=5----------------------------
 specificity = sensitivity = rep(0, 29)
-for (i in seq_along(0:28)){
+
+for (i in seq_along(0:28))
+{
   sensitivity[i] = sum(ts$ref_test[ts$new_test>=i]>=10)/sum(ts$ref_test>=10)
   specificity[i] = sum(ts$ref_test[ts$new_test<i]<10)/(sum(ts$ref_test[ts$new_test<i]<10)+sum(ts$ref_test[ts$new_test>=i]<10)) 
 }
-plot(0:28, sensitivity, ylab="sensitivity/specificity", xlab="new test score", ylim=c(0,1), type = "o", col="red",bty='l')
+
+plot(0:28, sensitivity, ylab="sensitivity/specificity", xlab="new test score", 
+     ylim=c(0,1), type = "o", col="red",bty='l')
 lines(0:28, specificity, col="green", type="o")
 
 ## ----fig.align='center', fig.height=5, fig.width=5----------------------------
@@ -98,76 +108,40 @@ abline(0,1,lty=2, col="grey")
 close_project(db)
 
 
-## ----eval=F, include=F--------------------------------------------------------
-#  # alternatief voor gesimuleerde data, misschine code laten zien?
-#  nP = 700
-#  nI = 60
-#  theta = c(rnorm(500, 0,2), rnorm(nP-500, 0.5,2))
-#  delta = runif(nI,-1,1)
-#  items = sprintf('%02i',1:nI)
-#  
-#  sim_func = r_score(data.frame(item_id=items, item_score=1, delta=delta))
-#  
-#  data = sim_func(theta)
-#  
-#  data[1:500, 41:60] = NA
-#  data[501:nP, 1:20] = NA
-#  
-#  ref_items = items[1:40]
-#  target_items = items[21:60]
-#  
-#  p = fit_enorm(data, method='Bayes', nDraws = 5000)
-#  
-#  pp = probability_to_pass(data, p,
-#                           ref_items = ref_items, pass_fail = 23,
-#                           target_booklets = data.frame(item_id=target_items))
-#  
-#  
+## -----------------------------------------------------------------------------
+#simulate data
+n_persons = 700
+n_items = 60
 
-## ----echo=FALSE, message=FALSE, results='hide'--------------------------------
-nP = 700
-nI = 60
-theta = c(rnorm(500, 0,2), rnorm(nP-500, 0.5,2))
-delta = runif(nI,-1,1)
-x = 0 + matrix(rlogis(nP*nI, outer(theta, delta, "-")) > 0, nP, nI)
-x1 = as.data.frame(x[1:500, 1:40])
-names(x1) = paste0('i', 1:40)
-x2 = as.data.frame(x[501:nP, 21:60])
-names(x2) = paste0('i', 21:60)
+theta = c(rnorm(500, 0,2), rnorm(n_persons-500, 0.5,2))
+items = data.frame(item_id = sprintf('%02i',1:n_items), item_score=1, beta = runif(n_items,-1,1))
 
-## ----echo=FALSE, message=FALSE, results='hide'--------------------------------
-rules = data.frame(item_id=rep(paste0('i',1:60), each=2), response=rep(c(0,1),60), item_score=rep(c(0,1),60))
-db_sm = start_new_project(rules, ":memory:")
-add_booklet(db_sm, x=x1, "bk1")
-add_booklet(db_sm, x=x2, "bk2")
-ref_items = paste0("i",1:40)
-new_booklet = "bk2"
-pass_fail = 23
-target_items = colnames(x2)
+data = r_score(items)(theta)
 
-## ----message=FALSE, fig.align='center', results='hide',fig.height=4,fig.width=4----
-p_sm = fit_enorm(db_sm, method='Bayes', nDraws = 5000)
+# incomplete design
+data[1:500, 41:60] = NA
+data[501:n_persons, 1:20] = NA
 
-ou_e = probability_to_pass(db_sm, p_sm,
-                           ref_items = ref_items, 
-                           target_booklets = tibble(booklet_id="bk2", item_id=target_items), 
-                           pass_fail = pass_fail)
-plot(ou_e, what="equating")
+## ----fig.align='center', results='hide',fig.height=4,fig.width=4--------------
+ref_items = items$item_id[1:40]
+target_items = items$item_id[21:60]
+
+p = fit_enorm(data, method='Bayes', nDraws = 5000)
+
+pp = probability_to_pass(data, p,
+                         ref_items = ref_items, pass_fail = 23,
+                         target_booklets = data.frame(item_id=target_items))
+plot(pp, what="equating")
 
 ## ----echo=TRUE, fig.align='center', results='hide', fig.height=4, fig.width=4----
-plot(ou_e, what='sens/spec')
+plot(pp, what='sens/spec')
 
 ## ----include=FALSE------------------------------------------------------------
-close_project(db_sm)
+score_new = coef(pp) |>
+  mutate(loss = (1-sensitivity)^2 + (1-specificity)^2) |>
+  filter(loss == min(loss)) |>
+  pull(score_new)
 
+## ----include=FALSE------------------------------------------------------------
 RcppArmadillo::armadillo_reset_cores()
-
-## ----eval = FALSE-------------------------------------------------------------
-#    p_pass_given_s = out$probability_to_pass
-#    ps = ou_e$pnew
-#    tp = rev(cumsum(rev(p_pass_given_s*ps))) / rev(cumsum(rev(ps)))
-#    sensitivity = rev(cumsum(rev(p_pass_given_s*ps))) / tp[1]
-#  
-#    tn = rev(cumsum(rev((1-p_pass_given_s)*ps))) / rev(cumsum(rev(ps)))
-#    specificity =  1 - rev(cumsum(rev((1-p_pass_given_s)*ps))) / tn[1]
 

@@ -172,8 +172,8 @@ pv_chain = function(x, design, b, a, nPV,
 #'
 #'
 #' @param dataSrc a connection to a dexter database, a matrix, or a data.frame with columns: person_id, item_id, item_score
-#' @param parms An object returned by function \code{fit_enorm} containing parameter estimates. If parms are provided, item parameters are considered known. 
-#' If parms = NULL, they will be estimated Bayesianly.
+#' @param parms An object returned by function \code{fit_enorm} containing parameter estimates or a data.frame with columns item_id, item_score and, 
+#' beta. If parms are provided, item parameters are considered known. If parms is NULL, they will be estimated Bayesianly.
 #' @param predicate an expression to filter data. If missing, the function will use 
 #' all data in dataSrc
 #' @param covariates name or a vector of names of the variables to group the populations used to improve the prior.
@@ -250,11 +250,12 @@ plausible_values = function(dataSrc, parms=NULL, predicate=NULL, covariates=NULL
   check_dataSrc(dataSrc)
   check_num(nPV, .length=1, .min=1)
   
+  df_info = get_datatype_info(dataSrc, columns = c('booklet_id','person_id',covariates))
+  
   plausible_values_(dataSrc, parms, qtpredicate=qtpredicate, covariates=covariates, nPV=nPV, 
                      parms_draw = parms_draw, env=env,prior_dist = prior_dist ,
                      merge_within_persons=merge_within_persons)$pv |>
-    mutate_if(is.factor, as.character) |>
-    df_format()
+    df_format(df_info)
 }
 
 
@@ -276,6 +277,7 @@ plausible_values_ = function(dataSrc, parms=NULL, qtpredicate=NULL, covariates=N
     prior_dist = 'normal'
   }
   
+
   pb = get_prog_bar(nsteps=if(is.null(parms)) 120 else 100, 
                     retrieve_data = is_db(dataSrc))
   on.exit({pb$close()})
@@ -325,6 +327,18 @@ plausible_values_ = function(dataSrc, parms=NULL, qtpredicate=NULL, covariates=N
       group_by_at(covariates) |>
       mutate(pop__ = group_number()) |>
       ungroup() 
+    
+    # sanity check: we need categorical variables
+    tally = table(respData$x$pop__)
+
+    if(min(tally)<=2 || max(tally)<=5)
+    {
+      warning("Ignoring covariates in plausible value computation because some categories have size <=2 or all categories have size <=5.\nAre you sure all covariates are nominal variables?")
+      respData$x = select(respData$x, -"pop__") 
+    } else if(any(sapply(respData$x[,covariates,drop=FALSE], function(v) is.double(v) && any(v %% 1!=0))))
+    {
+      warning("One or more of your covariates contain decimal numbers, this is rarely a good idea.\nAre you sure all covariates are nominal variables?")
+    }
   } 
   
   # join design with the params

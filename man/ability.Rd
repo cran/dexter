@@ -11,7 +11,7 @@ ability(
   predicate = NULL,
   method = c("MLE", "EAP", "WLE"),
   prior = c("normal", "Jeffreys"),
-  parms_draw = "average",
+  parms_draw = "sample",
   mu = 0,
   sigma = 4,
   merge_within_persons = FALSE
@@ -22,7 +22,7 @@ ability_tables(
   design = NULL,
   method = c("MLE", "EAP", "WLE"),
   prior = c("normal", "Jeffreys"),
-  parms_draw = "average",
+  parms_draw = c("sample", "average"),
   mu = 0,
   sigma = 4
 )
@@ -31,7 +31,7 @@ ability_tables(
 \item{dataSrc}{a connection to a dexter database, a matrix, or a data.frame with columns: person_id, item_id, item_score}
 
 \item{parms}{object produced by \code{\link{fit_enorm}} or a data.frame with columns item_id, item_score and, 
-depending on parametrization, a column named either beta/delta, eta or b}
+beta}
 
 \item{predicate}{An optional expression to subset data, if NULL all data is used}
 
@@ -41,7 +41,9 @@ depending on parametrization, a column named either beta/delta, eta or b}
 Jeffreys prior; i.e., a prior proportional to the square root of test information.}
 
 \item{parms_draw}{When parms is Bayesian, parms_draw can be the index of the posterior sample of the item 
-parameters that will be used for generating abilities. If parms_draw='average', the posterior mean is used.}
+parameters that will be used for generating abilities. If parms_draw='sample' ability estimates are estimated over all draws and averaged. Rubin's rule is used to combine the imputaiton variance and sampling variance. 
+If parms_draw='average', 
+the posterior mean of the item parameters is used.}
 
 \item{mu}{Mean of the normal prior}
 

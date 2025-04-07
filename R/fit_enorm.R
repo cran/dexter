@@ -2,39 +2,51 @@
 #' Fit the extended nominal response model
 #'
 #' Fits an Extended NOminal Response Model (ENORM) using conditional maximum likelihood (CML)
-#' or a Gibbs sampler for Bayesian estimation.
+#' or a Gibbs sampler for Bayesian estimation. 
+#' 
+#' @details
+#' 
+#' The eNRM is a generalization of the PCM and the OPLM. It
+#' reduces to the Rasch model for dichotomous items when all itemscores are 0 or 1, is equal to the PCM for polytomous items if all
+#' itemscores up to the maximum score occur. It is equal to the oplm if all itemscores have an equal common divisor larger than 1.
 #'
 #'
 #' @param dataSrc a connection to a dexter database, a matrix, or a data.frame with columns: person_id, item_id, item_score
 #' @param predicate An optional expression to subset data, if NULL all data is used
-#' @param fixed_params Optionally, a prms object from a previous analysis or 
+#' @param fixed_params Optionally, an \code{enorm} object from a previous analysis or 
 #' a data.frame with parameters, see details.
 #' @param method If CML, the estimation method will be Conditional Maximum Likelihood;
 #' otherwise, a Gibbs sampler will be used to produce a sample from the posterior
 #' @param nDraws Number of Gibbs samples when estimation method is Bayes. 
 #' @param merge_within_persons whether to merge different booklets administered to the same person, enabling linking over persons as well as booklets.
-#' @return An object of type \code{prms}. The prms object can be cast to a data.frame of item parameters 
-#' using function \code{coef} or used directly as input for other Dexter functions.
-#' @details
-#' To support some flexibility in fixing parameters, fixed_params can be a dexter prms object or a data.frame.
-#' If a data.frame, it should contain the columns item_id, item_score and a difficulty parameter. Three types of parameters are supported:
-#' \describe{
-#' \item{delta/beta}{ thresholds between subsequent item categories }
-#' \item{eta}{item-category parameters} 
-#' \item{b}{exp(-eta)}
+
+#' @returns An object of type \code{enorm}. The following methods are supported:
+#' \itemize{
+#' \item \code{\link[=coef.enorm]{coef}}
+#' \item \code{\link[=plot.enorm]{plot}}
+#' \item \code{\link[stats]{logLik}}
 #' }
-#' Each type corresponds to a different parametrization of the model. 
 #' 
+#' In addition, many dexter functions accept an \code{enorm} object as input, e.g.
+#' \itemize{
+#' \item \code{\link{ability}}
+#' \item \code{\link{plausible_values}}
+#' \item \code{\link{plausible_scores}}
+#' \item \code{\link{expected_score}}
+#'}
+#'
+#' @details
+#' To support some flexibility in fixing parameters, fixed_params can be a dexter enorm object or a data.frame.
+#' If it is a data.frame, it should contain the columns item_id, item_score and a difficulty parameter beta
+#' 
+#'
 #' @references 
 #' Maris, G., Bechger, T.M. and San-Martin, E. (2015) A Gibbs sampler for the (extended) marginal Rasch model. 
 #' Psychometrika. 80(4), 859-879. 
 #' 
-#' Koops, J. and Bechger, T.M. and Maris, G. (in press); Bayesian inference for multistage and other 
+#' Koops, J. and Bechger, T.M. and Maris, G. (2024); Bayesian inference for multistage and other 
 #' incomplete designs. In Research for Practical Issues and Solutions in Computerized Multistage Testing.
 #' Routledge, London. 
-#' 
-#' @seealso functions that accept a prms object as input: \code{\link{ability}}, \code{\link{plausible_values}}, 
-#' \code{\link{plot.prms}}, and \code{\link{plausible_scores}}
 #'
 fit_enorm = function(dataSrc, predicate = NULL, fixed_params = NULL, method=c("CML", "Bayes"), 
                      nDraws=1000, merge_within_persons=FALSE)
@@ -68,7 +80,7 @@ fit_enorm_ = function(dataSrc, qtpredicate = NULL, fixed_params = NULL, method=c
   ## maybe use simplify parms?
   if(!is.null(fixed_params))
   {
-    if(inherits(fixed_params,'prms'))
+    if(inherits(fixed_params,'enorm') || inherits(fixed_params,'prms'))
     {
       if(inherits(fixed_params,"mst_enorm"))
       {
@@ -121,25 +133,25 @@ fit_enorm_ = function(dataSrc, qtpredicate = NULL, fixed_params = NULL, method=c
     result = calibrate_Bayes(ss, nIter=nDraws, fixed_params=fixed_params)
   } 
   
-  mle = ss$design |> 
-    group_by(.data$booklet_id) |>
-    do({
-      est = theta_MLE(b=if.else(method=="Bayes",colMeans(result$b), result$b), 
-                      a=ss$ssIS$item_score, .$first, .$last, se=FALSE)
-      theta = est$theta[2:(length(est$theta)-1)]
-      tibble(booklet_score=1:length(theta), theta = theta)
-    }) |>
-    ungroup() 
+  est_mle = theta_wmle_c(b=matrix(if.else(method=="Bayes",colMeans(result$b), result$b),ncol=1),
+                     a=ss$ssIS$item_score,
+                     first=ss$design$first-1L, last = ss$design$last-1L,bk_nit = ss$booklet$nit, WLE=FALSE, n_cores=1L)
+
+  mle = tibble(booklet_id=ss$booklet$booklet_id[est_mle$booklet], 
+         booklet_score=drop(est_mle$booklet_score),
+         theta=drop(est_mle$theta)) |>
+    filter(is.finite(.data$theta))
   
   ss$method = method
   output = list(est=result, inputs=ss,abl_tables = list(mle = mle))
   
-  class(output) = append('prms', class(output)) 
+  class(output) = append('enorm', class(output)) 
   output
 }
 
+print.prms = function(x,...) print.enorm(x,...)
 
-print.prms = function(x, ...){
+print.enorm = function(x, ...){
   p = paste0( 'Parameters for the Extended Nominal Response Model\n\n',
               'Method: ', x$inputs$method, ', ',
               ifelse(x$inputs$method == 'CML',
@@ -151,6 +163,12 @@ print.prms = function(x, ...){
   
   cat(p)
   invisible(x)
+}
+
+
+coef.prms = function(object, hpd = 0.95, what=c('items','var','posterior'), ...)
+{
+  coef.enorm(object, hpd = hpd, what=what, ...)
 }
 
 #' extract enorm item parameters
@@ -191,7 +209,7 @@ print.prms = function(x, ...){
 #' For dichotomous items and for all polytomous items where \eqn{a_j-a_{j-1}} is constant, the formulation is equal to the OPLM.
 #' 
 #' 
-coef.prms = function(object, hpd = 0.95, what=c('items','var','posterior'), ...)
+coef.enorm = function(object, hpd = 0.95, what=c('items','var','posterior'), ...)
 {
   x = object
   what = match.arg(what)
@@ -226,7 +244,6 @@ coef.prms = function(object, hpd = 0.95, what=c('items','var','posterior'), ...)
                        sprintf("%i_hpd_b_left", round(100 * hpd)),
                        sprintf("%i_hpd_b_right", round(100 * hpd)))
     }
-    atab$item_id = as.character(atab$item_id)
     rownames(atab) = NULL
     return(df_format(atab))
   } else if(what=='var')
@@ -246,28 +263,6 @@ coef.prms = function(object, hpd = 0.95, what=c('items','var','posterior'), ...)
   }
 }
 
-# have not found useful methods yet for the many parameters we typically have
-# as.array.prms = function(x,...)
-# {
-#   #dimensions: iteration,chain,parameter
-#   if(x$inputs$method!="Bayes")
-#     stop('This method is only defined for Bayesian estimation')
-#   
-#   s = drop(x$est$chain_start)
-#   s = mapply(s,c(s[-1]-1,nrow(beta)),FUN=':')
-#   mn = min(sapply(s,length))
-#   s = lapply(s,function(i) i[1:mn])
-#   
-#   out = array(0,
-#               dim=c(mn,length(s), ncol(x$est$beta)), 
-#               dimnames=list(iteration=1:mn, chain=seq_along(s), item_score=paste(x$inputs$ssIS$item_id, x$inputs$ssIS$item_score)))
-#   for(i in seq_along(s))
-#   {
-#     out[,i,] = x$est$beta[s[[i]],]
-#   }
-#   out
-# 
-# }
 
 # returns log likelihood, or vector of log likelihoods if bayes
 logL = function(parms, mean_gibbs=FALSE)
@@ -309,7 +304,7 @@ logL = function(parms, mean_gibbs=FALSE)
   }
 }
 
-logLik.prms = function(object,...)
+logLik.enorm = function(object,...)
 {
   ll = logL(object)
   
@@ -411,7 +406,15 @@ calibrate_CML = function(ss,fixed_params=NULL)
       arrange(.data$item_id,.data$item_score) |>
       pull(.data$b)
     
-    if(!anyNA(b)) stop('nothing to calibrate, all parameters are fixed')
+    if(!anyNA(b))
+    {
+      message('\nnothing to calibrate, all parameters are fixed')
+      report = toOPLM(ss$ssIS$item_score, b, ss$ssI$first, ss$ssI$last, H=NULL, fixed_b=b)
+      b = report$b_renorm
+      
+      return(list(b=b, H=NULL, beta=report$beta, acov.beta=matrix(0,length(b),length(b)), lambda=NULL, n_iter=0, nr_iter = 0, ie_iter=0))
+    }
+    
     
     fixed_b = !is.na(b)
     b = coalesce(b,1)

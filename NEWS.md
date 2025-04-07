@@ -1,3 +1,19 @@
+
+# dexter 1.6.0
+
+* `ability` and `ability_tables`: in case a Bayesian estimation method was used for the item parameters ,argument `parms_draw = "sample"` now combines
+imputation and sampling error in the standard errors.
+
+* `information`, `p_score` and `expected_score` can return separate estimates for all parameter draws in case Bayesian estimation of item parameters was used.
+
+* improvement in binning for enorm fit plots
+
+* `tia_tables` distractor information extended with alternative-test correlation (rat), and distractors with frequency 0 added
+
+## small breaking change
+
+* classnames `prms` (returned by fit_enorm) and `rim` (returned by fit_inter) have been changed to `enorm` and `inter`
+
 # dexter 1.5.0
 
 * bugfix in `profiles()`: correct domain names when different booklets don't have the same domains

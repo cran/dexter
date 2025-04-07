@@ -23,9 +23,6 @@ library(dplyr)
 library(dexter)
 head(verbAggrRules, 10)
 
-## ----eval=FALSE---------------------------------------------------------------
-#  db = start_new_project(verbAggrRules, "verbAggression.db", person_properties=list(gender="unknown"))
-
 ## ----include=FALSE------------------------------------------------------------
 db = start_new_project(verbAggrRules, ":memory:", person_properties=list(gender="unknown"))
 
@@ -47,14 +44,8 @@ get_persons(db) |>
 ## -----------------------------------------------------------------------------
 tt = tia_tables(db)
 
-## ----eval=FALSE---------------------------------------------------------------
-#  tt$booklets
-
 ## ----echo=FALSE---------------------------------------------------------------
 kable(tt$booklets, digits=3)
-
-## ----eval=FALSE---------------------------------------------------------------
-#  tt$items
 
 ## ----echo=FALSE---------------------------------------------------------------
 kable(tt$items, digits=3)
@@ -78,9 +69,6 @@ parms = fit_enorm(db)
 
 ## ----results='hide'-----------------------------------------------------------
 parms_gibbs = fit_enorm(db, method='Bayes')
-
-## ----eval=F-------------------------------------------------------------------
-#  head(coef(parms_gibbs))
 
 ## ----echo=FALSE---------------------------------------------------------------
 kable(head(coef(parms_gibbs)), digits=3)

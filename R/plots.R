@@ -467,6 +467,13 @@ profile_plot = function(dataSrc, item_property, covariate, predicate = NULL, mod
 }
 
 
+plot.prms = function(x, item_id=NULL, dataSrc=NULL, predicate=NULL, nbins=5, ci = .95, 
+                      add=FALSE, col = 'black', col.model='grey80', ...)
+{
+  plot.enorm(x, item_id=item_id, dataSrc=dataSrc, predicate=predicate, nbins=nbins, ci = ci, 
+             add=add, col = col, col.model=col.model, ...)
+  
+}
 
 #' Plot for the extended nominal Response model
 #' 
@@ -494,9 +501,35 @@ profile_plot = function(dataSrc, item_property, covariate, predicate = NULL, mod
 #' intervals denote the uncertainty about the predicted pvalues within the ability groups for the 
 #' sample size in dataSrc (if not NULL) or the original data on which the model was fit.
 #' 
-#' @method plot prms
+#' @examples
+#' \dontshow{ RcppArmadillo::armadillo_throttle_cores(1)}
+#' db = start_new_project(verbAggrRules, ":memory:", 
+#'   person_properties=list(gender=""))
 #' 
-plot.prms = function(x, item_id=NULL, dataSrc=NULL, predicate=NULL, nbins=5, ci = .95, 
+#' add_booklet(db, verbAggrData, "agg")
+#' 
+#' f = fit_enorm(db)
+#' 
+#' plot(f, items="S1DoShout")
+#' 
+#' # side by side for two different groups
+#' # (it is also possible to show two lines in the same plot 
+#' # by specifying add=TRUE as an argument in the second plot)
+#' 
+#' par(mfrow=c(1,2))
+#' 
+#' plot(f,items="S1WantCurse",dataSrc=db, predicate = gender=='Male', 
+#'   main='men - $item_id')
+#' 
+#' plot(f,items="S1WantCurse",dataSrc=db, predicate = gender=='Female', 
+#'   main='women - $item_id')
+#' 
+#' close_project(db)
+#' \dontshow{ RcppArmadillo::armadillo_reset_cores()}
+#' 
+#' @method plot enorm
+#' 
+plot.enorm = function(x, item_id=NULL, dataSrc=NULL, predicate=NULL, nbins=5, ci = .95, 
                      add=FALSE, col = 'black', col.model='grey80', ...)
 {
   check_num(nbins,'integer',.length=1, .min=2)
@@ -543,16 +576,9 @@ plot.prms = function(x, item_id=NULL, dataSrc=NULL, predicate=NULL, nbins=5, ci 
       stop('unknown item',call.=FALSE)
     }
     
-    x$abl_tables = list()
-    
-    x$abl_tables$mle =  suppressWarnings({inner_join(respData$design, x$inputs$ssI,by='item_id')}) |>
-      group_by(.data$booklet_id) |>
-      do({
-        est = theta_MLE(b=x$est$b, a=x$inputs$ssIS$item_score, first=.$first, last=.$last, se=FALSE)
-        theta = est$theta[2:(length(est$theta)-1)]
-        tibble(booklet_score=1:length(theta), theta = theta)
-      }) |>
-      ungroup() 
+    x$abl_tables = list(mle = filter(ability_tables(x,design=respData$design, method='MLE',parms_draw='average'),is.finite(.data$theta)) )
+    if(!is.factor(x$abl_tables$mle$booklet_id))
+      x$abl_tables$mle$booklet_id = factor(x$abl_tables$mle$booklet_id,levels=levels(respData$design$booklet_id))
     
     x$inputs$plt = get_sufStats_nrm(respData, check_sanity=FALSE)$plt
   }
@@ -579,7 +605,7 @@ plot.prms = function(x, item_id=NULL, dataSrc=NULL, predicate=NULL, nbins=5, ci 
   plt = x$inputs$plt |>
     filter(.data$item_id==item_id_) |>
     inner_join(x$abl_tables$mle, by=c('booklet_id','booklet_score')) |>
-    mutate(abgroup = weighted_ntile(.data$theta, .data$N, n = nbins)) |>
+    mutate(abgroup = weighted_ntile(.data$theta, .data$N, nbins = nbins)) |>
     group_by(.data$abgroup) |>
     summarize(gr_theta = weighted.mean(.data$theta,.data$N), avg_score = weighted.mean(.data$meanScore,.data$N), n=sum(.data$N)) |>
     ungroup() |>
@@ -659,9 +685,9 @@ plot.prms = function(x, item_id=NULL, dataSrc=NULL, predicate=NULL, nbins=5, ci 
 #' Customization of title and subtitle can be done by using the arguments main and sub.
 #' These arguments can contain references to the variables item_id (if overlay=FALSE) or model (if overlay=TRUE)
 #' by prefixing them with a dollar sign, e.g. plot(m, main='item: $item_id')
-#' @method plot rim
+#' @method plot inter
 #'
-plot.rim = function(x, items=NULL, summate=TRUE, overlay=FALSE,
+plot.inter = function(x, items=NULL, summate=TRUE, overlay=FALSE,
                     curtains=10, show.observed=TRUE, ...){
   allItems = as.character(x$inputs$ssI$item_id)
   if(!is.null(items))
@@ -697,7 +723,7 @@ plot.rim = function(x, items=NULL, summate=TRUE, overlay=FALSE,
     #
     z = zRM[row.names(zRM) %in% items,]
     items = row.names(z)
-    maxy = max(z[1,ncol(z)])
+    maxy = max(z[,ncol(z)])
     
     plot.args = merge_arglists(user.args,
                                default=list(main="$model model",xlab="Test score",

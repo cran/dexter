@@ -7,6 +7,9 @@ profile_tables = function(parms, domains, item_property, design = NULL)
   
   if(length(unique(domains$item_id)) < nrow(domains))
     stop('column domains$item_id must be unique')
+  
+  df_info = append(get_datatype_info(domains, columns = item_property),
+                   get_datatype_info(design, columns = 'booklet_id'))
 
   parms = simplify_parms(parms,design=design,draw='average')
   
@@ -30,8 +33,7 @@ profile_tables = function(parms, domains, item_property, design = NULL)
   
   
   profile_tables_(parms$items, parms$a,parms$b, parms$design, domains, item_property) |>
-    mutate_if(is.factor, as.character) |>
-    df_format()
+    df_format(df_info)
 }
 
 # item_ids assumed factors (if not, may give warnings, messages)
@@ -67,7 +69,7 @@ profile_tables_ = function(items, a, b, design, domains, item_property)
 }
 
 # to~do: example
-##########################################
+
 #' Profile analysis
 #'
 #' Expected and observed domain scores, conditional on the test score, per person or test score. 
@@ -115,7 +117,9 @@ profiles = function(dataSrc, parms, item_property, predicate=NULL, merge_within_
   check_dataSrc(dataSrc)
   check_string(item_property)
   
-  if(inherits(parms,'prms'))
+  df_info = get_datatype_info(dataSrc, columns = c('person_id','booklet_id',item_property))
+  
+  if(inherits(parms,'enorm') || inherits(parms,'prms'))
     parms_check = coef(parms)[,c('item_id','item_score')]
   else
     parms_check = parms[,c('item_id','item_score')]
@@ -148,23 +152,19 @@ profiles = function(dataSrc, parms, item_property, predicate=NULL, merge_within_
       stop("some items belong to multiple domains, this is not allowed")
   }
   
-  respData = respData |>
-    polytomize_rd(item_property, protect_x=!is_db(dataSrc)) 
+  respData =  polytomize_rd(respData, item_property, protect_x=!is_db(dataSrc)) 
   
-  out = respData$x |>
-    inner_join(
-      profile_tables_(items = parms$items, a=parms$a,b=parms$b,
-                      design = parms$design,
-                      domains = domains,
-                      item_property = item_property),
-      by = c('booklet_id','booklet_score',item_id = item_property)) |>
-    mutate_if(is.factor, as.character) |>
-    df_format()
-  
+  out = inner_join(respData$x,
+            profile_tables_(items = parms$items, a=parms$a,b=parms$b,
+                            design = parms$design,
+                            domains = domains,
+                            item_property = item_property),
+            by = c('booklet_id','booklet_score',item_id = item_property)) 
+      
   colnames(out)[colnames(out)=='item_id'] = item_property
   colnames(out)[colnames(out)=='item_score'] = 'domain_score'
   
-  out
+  df_format(out, df_info)
 }
 
 # A profile is a table with two rows (earned, not earned) and number of columns
@@ -173,7 +173,7 @@ profiles = function(dataSrc, parms, item_property, predicate=NULL, merge_within_
 # Expected profile on subsets A given total score on all items in m
 # A is a vector of lists containing mutually exclusive subsets
 # subsets defined by the indices of items
-# prms is produced by fit_inter
+# parameters produced by fit_inter
 # output is list of profiles for each total score. For score s take E_RM[[s+1]]
 
 # first and last are reduced to only the items occurring in A
