@@ -5,7 +5,7 @@ RcppArmadillo::armadillo_throttle_cores(1)
 
 
 test_that('calibration of verbal aggression dataset matches oplm results, with fixed and unfixed',{
-  db = open_project(test_path('verbAggression.db'))
+  db = open_project(test_path('testdata/verbAggression.db'))
   
   #free calibration
   ff = fit_enorm(db)
@@ -16,16 +16,27 @@ test_that('calibration of verbal aggression dataset matches oplm results, with f
   expect_lt(
       mean((coef(ff) |>
              mutate(item_id=substr(item_id,1,8)) |>
-             inner_join(read_oplm_par(test_path('verbal_oplm/VERBAL.PAR')), by=c('item_id','item_score')) |>
+             inner_join(read_oplm_par(test_path('testdata/verbal_oplm/VERBAL.PAR')), by=c('item_id','item_score')) |>
              mutate(difference=abs(beta.x-beta.y)))$difference),
       1e-15)
+  
+  x = get_responses(db, columns=c('person_id','item_id','item_score','item_position')) |>
+    mutate(even = as.integer(gsub('\\D+','',person_id)) %% 2 == 0) |>
+    filter((even & item_position<=16) | (!even & item_position>8))
+  
+  ff2 = fit_enorm(x)
+  
+  tst=inner_join(coef(ff),coef(ff2),by=c('item_id','item_score'))
+  
+  expect_true(cor(tst$beta.x,tst$beta.y) > 0.98)
+  
   
   #calibration with fixed_parameters
   
   # determine which are fixed from the cml file but use the parameters from the par file
   # since they are less rounded
-  oplm_params = read_oplm_par(test_path('verbal_oplm/VERBAL_FX.PAR')) |>
-    inner_join(read_oplm_par(test_path('verbal_oplm/VERBAL_FX.CML')), by=c('item_id','item_score')) |>
+  oplm_params = read_oplm_par(test_path('testdata/verbal_oplm/VERBAL_FX.PAR')) |>
+    inner_join(read_oplm_par(test_path('testdata/verbal_oplm/VERBAL_FX.CML')), by=c('item_id','item_score')) |>
     mutate(is_fixed=is.na(se.b)) |>
     select(oplm_lab=item_id, item_score, beta=beta.x, se.b, is_fixed)
   
