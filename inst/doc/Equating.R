@@ -7,7 +7,6 @@ if (requireNamespace("Cairo", quietly = TRUE))
    opts_chunk$set(dev='CairoPNG')
 }
 library(dplyr)
-library(ggplot2)
 
 RcppArmadillo::armadillo_throttle_cores(1)
 
@@ -55,7 +54,7 @@ CurlyBraces(x=0, y=1-rg/2, range=rg, dir=1)
 text(1,1-rg/2,'TPR',cex=.6)
 
 
-## ----echo=TRUE,  results='hide', fig.align='center', fig.height=4, fig.width=4----
+## ----echo=TRUE,  results='hide', fig.align='center', fig.height=4, fig.width=5----
 library(dexter)
 
 db = start_new_project(verbAggrRules, ":memory:")
@@ -65,13 +64,13 @@ ts = get_testscores(db, item_position < 15) |>
   inner_join(get_testscores(db, item_position >= 15), by='person_id') |>
   rename(ref_test= 'booklet_score.y', new_test = 'booklet_score.x')
 
+ts_count = count(ts, new_test,ref_test) |>
+  mutate(p=100*n/sum(n))
 
-ggplot(ts, aes(x = new_test, y = ref_test)) +
-  geom_count(show.legend = F) +
-  geom_hline(yintercept = 10, colour = 'green') +
-  labs(y = 'ref. test score', x = 'target test score') +
-  theme(panel.background = element_blank(),
-        axis.line = element_line(colour = "black"))
+plot(ts_count$new_test,ts_count$ref_test,cex=ts_count$p, pch=20,
+  ylab= 'reftest score', xlab = 'target test score',bty='l')
+
+abline(h=10, col='green')
 
 ## ----fig.align='center', fig.height=5, fig.width=5----------------------------
 prob_pass = tp = rep(0,29)

@@ -1,4 +1,10 @@
 
+# dexter 1.6.2
+
+* support for tidyverses .data and .env pronouns in predicates
+
+* Bugfix when person_id or booklet_id are numeric, variable in output were mangled in ability, plausible values and plausible scores. 
+
 # dexter 1.6.1
 
 * Bugfix `ability_tables` did not correctly handle the design argument. This bug was introduced in version 1.6.0
@@ -9,7 +15,7 @@
 
 * `plot.enorm` now silently returns a single data.frame (with an added column 'item_id') instead of a list of data.frames when multiple items are plotted.
 
-* When plotting multiple items with `plot.enorm` they can optionally be arranged by mean squared difference between the data and the model prediction.
+* When plotting multiple items with `plot.enorm` they can optionally be sorted by mean squared difference between the data and the model prediction.
 
 # dexter 1.6.0
 
@@ -249,7 +255,7 @@ item parameters
 
 * `ability_tables()` function added to generate score transformation tables 
   for arbitrary subsets of items. `ability()` and `ability_tables()` can now also 
-  take Jeffreys prior and variatons of the normal prior and can optionally 
+  take Jeffreys prior and variations of the normal prior and can optionally 
   output standard errors.
   
 * `plausible_scores()` function added to generate scores on arbitrary itemsets

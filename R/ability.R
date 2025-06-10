@@ -16,7 +16,7 @@
 #' @param prior    If an EAP estimate is produced one can choose a normal prior or
 #'                 Jeffreys prior; i.e., a prior proportional to the square root of test information.
 #' @param parms_draw When parms is Bayesian, parms_draw can be the index of the posterior sample of the item 
-#' parameters that will be used for generating abilities. If parms_draw='sample' ability estimates are estimated over all draws and averaged. Rubin's rule is used to combine the imputaiton variance and sampling variance. 
+#' parameters that will be used for generating abilities. If parms_draw='sample' ability estimates are estimated over all draws and averaged. Rubin's rule is used to combine the imputation variance and sampling variance. 
 #' If parms_draw='average', 
 #' the posterior mean of the item parameters is used. 
 #' @param mu Mean of the normal prior
@@ -63,10 +63,11 @@
 #' Psychometrika, 54(3), 427-450. 
 #' 
 ability = function(dataSrc, parms, predicate=NULL, method=c("MLE","EAP","WLE"), prior=c("normal", "Jeffreys"), 
-                   parms_draw='sample', mu=0, sigma=4, merge_within_persons=FALSE)
+                   parms_draw=c('sample','average'), mu=0, sigma=4, merge_within_persons=FALSE)
 {
   check_dataSrc(dataSrc)
-
+  if(is.numeric(parms_draw)) check_num(parms_draw,.length=1)
+  else parms_draw = match.arg(parms_draw)
   method = match.arg(method)
   prior = match.arg(prior) 
   qtpredicate = eval(substitute(quote(predicate)))

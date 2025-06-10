@@ -266,6 +266,35 @@ test_that('empty levels are resolved',{
   expect_equal_respData(r1,r2)
 })
    
+test_that('reconstruct output vartypes',{
+  
+  test = tibble(
+    a = factor(letters[1:10], levels=rev(letters)),
+    b = rnorm(10),
+    c = 2L * 15:6,
+    d = rev(letters[6:15]),
+    e = as.double(21:30))
+  
+  info = dexter:::get_datatype_info(test, columns=colnames(test)) 
+  
+  out_char = dexter:::df_format(mutate(test, across(everything(),factor))) |>
+    as_tibble()
+  
+
+  expect_identical(mutate(test, across(everything(), as.character)),out_char,label='out format defaults to character')
+  
+  
+  out = dexter:::df_format(mutate(test, across(everything(),factor)), datatype_info=info) |>
+    as_tibble()
+  
+  # doubles are never correctly preserved, unless they are integer like
+  # # to do: should we even allow doubles as id's?
+  expect_equal(test,out, label='vartypes are correctly preserved')
+  
+  
+  
+})
+
 
 test_that('sql translation',
 {
@@ -278,13 +307,14 @@ test_that('sql translation',
   }
   
   a=3
-  expect_equal(trans(!!a==b, 'a'), '3 = "b"')
-  expect_equal(trans(local(a)==b, 'a'), '3 = "b"')
-  expect_equal(trans(a==b), '3 = "b"')
-  expect_equal(trans(a==b, 'a'), '"a" = "b"')
+  vrs = c('a','b')
+  expect_equal(trans(!!a==b, vrs), '3 = "b"')
+  expect_equal(trans(local(a)==b, vrs), '3 = "b"')
+  expect_equal(trans(a==b,'b'), '3 = "b"')
+  expect_equal(trans(a==b, vrs), '"a" = "b"')
   
-  expect_equal(trans(a == paste(b,'c'), 'a','sqlite'), "\"a\" = \"b\"||' '||'c'")
-  expect_equal(trans(a == paste(b,'c'), 'a', 'ansi'), "\"a\" = CONCAT_WS(' ',\"b\",'c')")
+  expect_equal(trans(a == paste(b,'c'), vrs,'sqlite'), "\"a\" = \"b\"||' '||'c'")
+  expect_equal(trans(a == paste(b,'c'), vrs, 'ansi'), "\"a\" = CONCAT_WS(' ',\"b\",'c')")
   
   # get
   v = 'gender'
@@ -293,11 +323,11 @@ test_that('sql translation',
   
   
   # named and unnamed arguments
-  expect_equal(trans(b==substr(a,4,7),c('a','b')),
-               trans(b==substr(a,stop=7,4),c('a','b')))
+  expect_equal(trans(b==substr(a,4,7),vrs),
+               trans(b==substr(a,stop=7,4),vrs))
   
   #missing arguments
-  expect_error(trans(between(a,b),c('a','b')))
+  expect_error(trans(between(a,b),vrs))
   
   # named vector
   b = c(blaat=1,geit=2)
@@ -306,7 +336,10 @@ test_that('sql translation',
   expect_equal(trans(a %in% b,'a','ansi'),  '"a" in (1,2)')
   
   # ranges
-  expect_equal(trans(a %in% b:10,c('a','b')), "CAST( \"a\"  AS INTEGER) BETWEEN \"b\" AND 10")
+  expect_equal(tolower(trans(a %in% 5:10,vrs)), "\"a\" in (5,6,7,8,9,10)")
+  
+  b=7
+  expect_equal(tolower(trans(a %in% 5:.env$b,vrs)),"\"a\" in (5,6,7)")
   
   #casting
   expect_equal(trans(as.character(a),'a'), "CAST( \"a\" AS character )")
@@ -319,15 +352,26 @@ test_that('sql translation',
   expect_equal(trans(x == a[['x']], 'x'),'"x" = 5')
   
   # combined c
-  expect_equal(trans(x %in% c(y,4,c(5,6))), trans(x %in% c(y,4,5,6)))
+  y=123
+  expect_equal(trans(x %in% c(y,4,c(5,6)),'x'), trans(x %in% c(y,4,5,6),'x'))
   
   # substr
-  expect_equal(trans(quote(x == substr(d,5,6))), '"x" = substr( "d" , 5 , 2 )')
-  expect_equal(trans(quote(x == substr(d,5,y))), '"x" = substr( "d" , 5 , (1+("y")-(5)) )')
+  expect_equal(trans(x == substr(d,5,6),c('x','d')), '"x" = substr( "d" , 5 , 2 )')
+  expect_equal(trans(x == substr(d,5,y),c('x','d','y')), '"x" = substr( "d" , 5 , (1+("y")-(5)) )')
+  expect_equal(trans(endsWith(mode,'o'),'mode'),"substr(\"mode\",1+length(\"mode\")-length('o'))='o'") 
   
   #unsure if we want to automatically unpack lists of length 1
   #expect_equal(trans(x == a['x'], 'x'),'"x" = 5')
-
+  
+  # .data and .env, quasi quotation
+  a = 5L
+  expect_equal(trans(a==.env$a),'5 = 5')
+  expect_equal(trans(a==.env$a, vars='a'),'"a" = 5')
+  expect_equal(trans(.data$a==.env$a, vars='a'),'"a" = 5')
+  
+  expect_equal(trans(.data$a==!!a,vars='a'),'"a" = 5')
+  
+  expect_error(trans(.data$a==.env$a),'not found')
 })    
   
 

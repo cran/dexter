@@ -1,4 +1,15 @@
 
+
+stop_var_not_found = function(var)
+{
+  stop(errorCondition(sprintf("Variable '%s' not found", var),class='var-not-found-error'))
+}
+
+is_error_var_not_found = function(e)
+{
+  inherits(attr(e,'condition'),'var-not-found-error')
+}
+
 # attempt to translate a quoted predicate and an environment to an SQL 'WHERE' statement
 # also returns vars intersected with db and all_vars
 qtpredicate_to_sql = function(qtpredicate, db, env)
@@ -41,7 +52,9 @@ qtpredicate_to_sql = function(qtpredicate, db, env)
   } else
   {
     pred = try(partial_eval(qtpredicate, vars=dbvars, env=env), silent=TRUE)
-    # error is extremely unlikely
+    
+    if(is_error_var_not_found(pred)) stop_(pred)
+
     if(is.null(pred) || inherits(pred,'try-error'))
     {
       out$success = FALSE
@@ -61,10 +74,6 @@ qtpredicate_to_sql = function(qtpredicate, db, env)
   }
   out$db_vars = intersect(dbvars, out$all_vars)
 
-  for( v in setdiff(out$all_vars, out$db_vars))
-    if(!env_has(env, v, inherit=TRUE))
-      stop("object '", v, "' not found")
-  
   out
 }
 
@@ -132,6 +141,7 @@ eval_symbol = function(sbl, vars, env)
   
   if(name %in% vars)
     return(sbl)
+  
   # functions should possibly/probably be excluded here
   if (env_has(env, name, inherit = TRUE)) 
     return(eval(sbl, env))
@@ -141,8 +151,7 @@ eval_symbol = function(sbl, vars, env)
     message("All variable names in a project are lowercase, changed '", name, "' -> '", tolower(name),"'")
     return(as.symbol(tolower(name)))
   }
-  
-  sbl
+  stop_var_not_found(name)
 }
 
 
@@ -175,10 +184,10 @@ non.nse.vars = function(e)
 
 eval_lang = function(call, vars, env)
 {
-  if(is.function(call[[1]]) || is.call(call[[1]]))
-  {
-    return(eval(call,env))
-  }
+  #if(is.function(call[[1]]) || is.call(call[[1]]))
+  #{
+  #  return(eval(call,env))
+  #}
 
   if(length(intersect(c('%like%','get'), all.names(call))) == 0 && 
      length(intersect(vars, non.nse.vars(call))) == 0)
@@ -212,6 +221,17 @@ eval_lang = function(call, vars, env)
       return(eval_lang(call[[2]][[2]], vars=vars, env=env))
     }
   }
+  
+  # support .env and .data pronouns
+  if(name == '$')
+  {
+    if(as.character(call[[2]]) == '.env' ) return(eval(call[[3]], env))
+    if(as.character(call[[2]]) == '.data' )
+    {
+      return(eval_symbol(call[[3]], vars, env=empty_env()))
+    }
+  }
+  
     
   if(name %in% c("$", "[[", "["))
     return(eval(call, env))
@@ -249,26 +269,7 @@ partial_eval = function (e, vars = character(), env)
   e
 }
 
-check_function_call = function(call)
-{
-  f = sapply(formals(as.character(call[[1]])), is.symbol)
-  
-  if('...' %in% names(f))
-    return(NULL)
-    
-  arg_names = names(call)[2:length(call)]
-  stopifnot(length(call)-1<=length(f))
-  
-  if(is.null(arg_names))
-  {
-    if(length(call)-1<length(f))
-      stopifnot(all(!f[length(call):length(f)]))
-  } else
-  {
-    stopifnot(length(setdiff(arg_names,c(names(f),"")))==0) 
-    stopifnot(length(setdiff(names(f)[f], arg_names)) <= sum(arg_names==""))
-  }
-}
+
 
 get_arg = function(name, call)
 {
@@ -354,7 +355,7 @@ sql_cast = function(e, type, variant)
 translate_sql_lang = function(call, variant)
 {
   name = as.character(call[[1]])
-  
+
   if(name == '=')
     stop('assignment')
   
@@ -373,9 +374,6 @@ translate_sql_lang = function(call, variant)
   if(name %in% c('+','-','/','*'))
     return(sql_infix(call, name, variant))
   
-  if(name == '%in%' && typeof(call[[3]]) == 'language' && as.character(call[[3]][[1]]) == ':')
-    return(paste('CAST(', translate_sql(call[[2]], variant), ' AS INTEGER) BETWEEN', 
-                   translate_sql(call[[3]][[2]],variant), 'AND', translate_sql(call[[3]][[3]],variant)))
 
   if(name %in% c('(','{') )
     return(paste0('(',translate_sql(call[[2]], variant),')'))
@@ -394,9 +392,7 @@ translate_sql_lang = function(call, variant)
     return(paste(' NOT (', translate_sql(call[[2]], variant),')'))
   }
   
-  if(is.function(call[[1]]))
-    check_function_call(call)
-  
+
   if(name == 'xor')
   {
     a = translate_sql(call[[2]], variant)
@@ -426,7 +422,10 @@ translate_sql_lang = function(call, variant)
   
   # simple %in% : already done 
   if(name == ':')
-    stop('untranslatable') 
+  {
+    if(is.symbol(call[[2]]) || is.symbol(call[[3]])) stop('untranslatable') 
+    return(translate_sql(eval(call),variant=variant))
+  }
   
   if(name %in% c('nchar','str_length'))
     return(paste0("LENGTH(",translate_sql(call[[2]], variant),")"))
@@ -503,7 +502,7 @@ translate_sql_lang = function(call, variant)
                     "))=",translate_sql(call[[3]], variant)))
     if(name == 'endsWith')
       return(paste0("substr(",translate_sql(call[[2]], variant),
-                    ",length(",translate_sql(call[[2]], variant),")-length(",translate_sql(call[[3]], variant),
+                    ",1+length(",translate_sql(call[[2]], variant),")-length(",translate_sql(call[[3]], variant),
                     "))=",translate_sql(call[[3]], variant)))
     
     if(name=="paste")

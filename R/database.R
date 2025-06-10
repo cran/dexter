@@ -4,10 +4,6 @@ is_db = function(db)
   inherits(db,'DBIConnection')
 }
 
-is_scored_db = function(db)
-{
-  !dbExists(db, 'SELECT 1 FROM dxScoring_rules WHERE CAST(item_score AS TEXT) <> response;')
-}
 
 dbRunScript = function(db, fn)
 {
@@ -48,7 +44,7 @@ dbCheck_existing_colnames = function(db, varnames)
   
   if(any(varnames %in% fields))
   {
-    stop_(format_plural('These name[s] are already in use in your project: %s', intersect(varnames, fields)))
+    stop_(format_plural('[This name is/These names are] already in use in your project: %s', intersect(varnames, fields)))
   }
 }
 
