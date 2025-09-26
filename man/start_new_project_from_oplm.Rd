@@ -14,7 +14,7 @@ start_new_project_from_oplm(
   person_id = NULL,
   missing_character = c(" ", "9"),
   use_discrim = FALSE,
-  format = "compressed"
+  skip_invalid_booklets = FALSE
 )
 }
 \arguments{
@@ -40,7 +40,9 @@ default is to use both a space and a 9 as missing characters.}
 \item{use_discrim}{if TRUE, the scores for the responses will be multiplied by the
 discrimination parameters of the items}
 
-\item{format}{not used, at the moment only the compressed format is supported.}
+\item{skip_invalid_booklets}{whether to skip lines that have a booklet number that is not listed in the .scr file. This supports 
+an extremely poor but unfortunately common practice of excluding students by changing their booklets id's or inserting random 
+comments in the data file. If `skip_invalid_booklets` is TRUE such lines will be skipped, if FALSE they will generate an error}
 }
 \value{
 a database connection object.
@@ -54,9 +56,9 @@ the proprietary oplm format. Four custom variables are added to the database:
 booklet_on_off, oplm_marginal, item_local_on_off, item_global_on_off. These are taken from the .scr file
 and can be used in predicates in the various dexter functions.
 
-Booklet_position and responses_start are usually inferred from the scr file but since they
-are sometimes misspecified in the scr file they can be overridden. Response_length is not 
-inferred from the scr file since anything other than 1 is most often a mistake.
+`booklet_position` and `responses_start` can be inferred from the .scr file but since they
+are sometimes misspecified in the .scr file they can be overridden. `response_length` is not 
+inferred from the .scr file since any value other than 1 is usually a mistake.
 }
 \examples{
 \dontrun{\donttest{

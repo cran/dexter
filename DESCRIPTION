@@ -1,7 +1,7 @@
 Package: dexter
 Type: Package
 Title: Data Management and Analysis of Tests
-Version: 1.6.2
+Version: 1.7.0
 Authors@R: c(
     person("Gunter","Maris", role="aut"),
     person("Timo","Bechger", role="aut"),
@@ -20,14 +20,14 @@ Imports: RSQLite (>= 2.2.7), DBI (>= 1.0.0), MASS (>= 7.3), tidyr (>=
         RcppArmadillo (>= 0.12.6.6.0), graphics, grDevices, methods,
         utils
 LinkingTo: Rcpp, RcppArmadillo (>= 0.12.6.6.0), dqrng, BH, sitmo
-RoxygenNote: 7.3.2
-Suggests: knitr, rmarkdown, latticeExtra, testthat, Cairo
+RoxygenNote: 7.3.3
+Suggests: knitr, rmarkdown, latticeExtra, testthat, Cairo, cli
 VignetteBuilder: knitr
 NeedsCompilation: yes
-Packaged: 2025-06-10 11:36:17 UTC; jessek
+Packaged: 2025-09-25 10:54:33 UTC; jessek
 Author: Gunter Maris [aut],
   Timo Bechger [aut],
   Jesse Koops [aut, cre],
   Ivailo Partchev [aut]
 Repository: CRAN
-Date/Publication: 2025-06-10 12:10:02 UTC
+Date/Publication: 2025-09-26 22:10:02 UTC
