@@ -301,6 +301,9 @@ pp_segments = function(maxA, maxB, psbl, col='lightgray',cex=0.6)
 
 #' Profile plot
 #'
+#' Compare how subgroups attain a test score with respect to an item property. 
+#' \strong{Note}: this function works for complete data (i.e. a single booklet/test form). If incomplete data is supplied, it will attempt to 
+#' make a profile plot only for those items that were administered to all respondents. 
 #'
 #' @param dataSrc a connection to a dexter database or a data.frame with columns: 
 #' person_id, item_id, item_score and the item_property and the covariate of interest.
@@ -517,7 +520,7 @@ plot.prms = function(x, item_id=NULL, dataSrc=NULL, predicate=NULL, nbins=5, ci 
 #' # (it is also possible to show two lines in the same plot 
 #' # by specifying add=TRUE as an argument in the second plot)
 #' 
-#' par(mfrow=c(1,2))
+#' oldpar = par(mfrow=c(1,2))
 #' 
 #' plot(f,item_id="S1WantCurse",dataSrc=db, predicate = gender=='Male', 
 #'   main='men - $item_id')
@@ -525,6 +528,7 @@ plot.prms = function(x, item_id=NULL, dataSrc=NULL, predicate=NULL, nbins=5, ci 
 #' plot(f,items="S1WantCurse",dataSrc=db, predicate = gender=='Female', 
 #'   main='women - $item_id')
 #' 
+#' par(oldpar)
 #' close_project(db)
 #' \dontshow{ RcppArmadillo::armadillo_reset_cores()}
 #' 
