@@ -47,7 +47,7 @@ probability_to_pass = function(dataSrc, parms, ref_items, pass_fail, predicate =
   
   check_character(ref_items)
   
-  
+  max_cores = get_ncores(desired = 32L, maintain_free = 1L)
   
   pb = get_prog_bar(nsteps=nDraws+10,retrieve_data = is_db(dataSrc))
   on.exit({pb$close()})
@@ -63,7 +63,7 @@ probability_to_pass = function(dataSrc, parms, ref_items, pass_fail, predicate =
   {
     design = target_booklets |>
       mutate(item_id = factor(as.character(.data$item_id), levels = levels(respData$design$item_id)))
-        
+    
     if(anyNA(design$item_id))
       stop('One or more items in design does not occur in your dataSrc')
     
@@ -80,11 +80,11 @@ probability_to_pass = function(dataSrc, parms, ref_items, pass_fail, predicate =
     stop('One or more of your reference items does not occur in your dataSrc')
   
   ref_parms = simplify_parms(parms,design=ref_items)
- 
+  
   n_booklets = n_distinct(design$booklet_id)
   pb$set_nsteps(10+(nDraws+10)*n_booklets)
   
-
+  
   # Get mean and sd of ability in sample
   pb$new_area(10)
   pv = plausible_values_(respData, parms, parms_draw='average')$pv
@@ -98,8 +98,8 @@ probability_to_pass = function(dataSrc, parms, ref_items, pass_fail, predicate =
   # some common summary statistics for the reference items
   if (ref_parms$method == "Bayes")
   {
-    n_bayes = nrow(ref_parms$b)
-    # can do always use all bayes iterations?
+    n_bayes = ncol(ref_parms$b)
+
     if(n_bayes < nDraws)
     {
       warning('nDraws set to ', n_bayes, '. See the help page for details')
@@ -107,14 +107,12 @@ probability_to_pass = function(dataSrc, parms, ref_items, pass_fail, predicate =
     }
     iter_set = round(seq(1, n_bayes, n_bayes/nDraws))
     iter_set  = iter_set + (n_bayes - iter_set[nDraws])
-    ref_theta = ML_theta(pass_fail, t(ref_parms$b[iter_set,]),ref_parms$a,ref_parms$design$first, ref_parms$design$last)
-
+    ref_theta = ML_theta(pass_fail, ref_parms$b[,iter_set],ref_parms$a, ref_parms$design$first, ref_parms$design$last)
+    
   } else
   {
     ref_theta = ML_theta(pass_fail,ref_parms$b,ref_parms$a, ref_parms$design$first, ref_parms$design$last)
   }
-  
-  max_cores = get_ncores(desired = 32L, maintain_free = 1L)
   
   bk_results = lapply(split(target_parms$design, target_parms$design$booklet_id), function(dsg)
   {
@@ -134,9 +132,8 @@ probability_to_pass = function(dataSrc, parms, ref_items, pass_fail, predicate =
     probs = matrix(0,max_score+1, nDraws)
     
     # some constants for cpp func
-    bcni = c(0L,length(dsg$first0))
-    cbk = integer(length(scores))
     cmu = rep(new_mu,length(scores))
+    booklet_ids = integer(length(scores))
     
     
     if(target_parms$method == "Bayes")
@@ -144,20 +141,22 @@ probability_to_pass = function(dataSrc, parms, ref_items, pass_fail, predicate =
       eq_score = rep(-1L, length(iter_set))
       tel = 1
       # start values
-      spv = theta_eap_c(quadpoints$nodes * new_sigma + new_mu, quadpoints$weights,
-                        matrix(colMeans(target_parms$b),ncol=1),target_parms$a,
-                        dsg$first0, dsg$last0, nrow(dsg))$theta
-      if(!is.matrix(spv))
-        spv = matrix(spv,ncol=1)
-      
+      spv = drop(theta_eap_c(quadpoints$nodes * new_sigma + new_mu, quadpoints$weights,
+                        matrix(rowMeans(target_parms$b),ncol=1),target_parms$a,
+                        dsg$first0, dsg$last0, nrow(dsg))$theta)
+
       for(iter in iter_set)
       {
-        eq_score[tel] = equated_score(target_parms$b[iter,],target_parms$a, dsg$first, dsg$last, ref_theta[tel])
-
-        PV_sve(target_parms$b[iter,],target_parms$a, dsg$first0, dsg$last0, bcni,cbk, scores, cmu, new_sigma,spv, niter=30L, max_cores=max_cores)
+        eq_score[tel] = equated_score(target_parms$b[,iter],target_parms$a, dsg$first, dsg$last, ref_theta[tel])
         
-        prf = pscore(spv, ref_parms$b[iter,],ref_parms$a,ref_parms$design$first,ref_parms$design$last)
-        probs[,tel] = apply(prf, 2, function(x) sum(x[ref_range]))
+        lgamma = log(elsymC(target_parms$b[,iter],target_parms$a, dsg$first0, dsg$last0))
+        
+        pv_metro(lgamma, max_score, booklet_id=booklet_ids, booklet_score = scores,
+                    prior_mu=cmu, prior_sigma=new_sigma,
+                    pv_res=spv, max_cores=max_cores, n_updates=20L)
+        
+        prf = pscore(spv, ref_parms$b[,iter],ref_parms$a,ref_parms$design$first,ref_parms$design$last)
+        probs[,tel] = apply(prf, 'theta', function(x) sum(x[ref_range]))
         tel=tel+1
         pb$tick()
       }
@@ -166,22 +165,25 @@ probability_to_pass = function(dataSrc, parms, ref_items, pass_fail, predicate =
       eq_score = equated_score(target_parms$b,target_parms$a, dsg$first, dsg$last, ref_theta)
       
       # start values
-      spv = theta_eap_c(quadpoints$nodes * new_sigma + new_mu, quadpoints$weights,
+      spv = drop(theta_eap_c(quadpoints$nodes * new_sigma + new_mu, quadpoints$weights,
                         matrix(target_parms$b,ncol=1),target_parms$a,
-                        dsg$first0, dsg$last0, nrow(dsg))$theta
+                        dsg$first0, dsg$last0, nrow(dsg))$theta)
       
-      if(!is.matrix(spv))
-        spv = matrix(spv,ncol=1)
+      lgamma = log(elsymC(target_parms$b,target_parms$a, dsg$first0, dsg$last0))
+      lgamma_ref = log(elsymC(ref_parms$b, ref_parms$a, ref_parms$design$first0, ref_parms$design$last0))
       
       for (iter in 1:nDraws)
       {
-        PV_sve(target_parms$b,target_parms$a, dsg$first0, dsg$last0, bcni,cbk, scores, cmu, new_sigma,spv, niter=30L, max_cores=max_cores)
-        prf = pscore(spv, ref_parms$b, ref_parms$a, ref_parms$design$first, ref_parms$design$last)
-        probs[,iter] = apply(prf, 2, function(x) sum(x[ref_range]))
+        pv_metro(lgamma, max_score, booklet_id=booklet_ids, booklet_score = scores,
+                    prior_mu=cmu, prior_sigma=new_sigma,
+                    pv_res=spv, max_cores=max_cores, n_updates=20L)
+        
+        prf = pscore_lgamma(spv, lgamma_ref)
+        probs[,iter] = apply(prf, 'theta', function(x) sum(x[ref_range]))
         pb$tick()
       }
     }
-
+    
     p_pass_given_new = rowMeans(probs) 
     
     ## additional
@@ -204,6 +206,7 @@ probability_to_pass = function(dataSrc, parms, ref_items, pass_fail, predicate =
                            ref_items = ref_items, pass_fail = pass_fail,
                            design = design)) 
   class(out) = append('p2pass', class(out))
+  
   out
 }
 
@@ -211,7 +214,7 @@ probability_to_pass = function(dataSrc, parms, ref_items, pass_fail, predicate =
 equated_score = function(b,a,first,last, ref_theta)
 {
   est = theta_wmle_c(matrix(b,ncol=1), a, first-1L,last-1L,length(first), FALSE)
-  min(which(drop(est$theta) >= ref_theta)) - 1L
+  min(which(drop(est$theta) >= drop(ref_theta))) - 1L
 }
 
 

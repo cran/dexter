@@ -128,7 +128,7 @@ ability_tables = function(parms, design = NULL, method = c("MLE","EAP","WLE"), p
     n_cores=1
   } else
   {
-    b = t(b) # column per draw instead of row
+    # b = t(b) # column per draw, since 1.8 this is already the case
     n_cores = get_ncores(min(20,ncol(b)),1)
   }
   
@@ -162,34 +162,6 @@ ability_tables = function(parms, design = NULL, method = c("MLE","EAP","WLE"), p
 }
 
 
-# Expected distribution given a vector theta
-# return matrix, ncol=length(theta), nrow=nscores
-pscore = function(theta, b, a, first, last)
-{
-  g = elsymC(b, a, first-1L, last-1L)
-  score = 0:(length(g)-1)
-  p = sapply(theta, function(tht) log(g) + score*tht)
-  
-  exp(sweep(p,2,apply(p,2,logsumexp),`-`))
-}
-
-
-rscore_item = function(theta,b,a,first,last)
-{
-  first = as.integer(first-1L)
-  last = as.integer(last-1L)
-  a = as.integer(a)
-  sampleNRM_itemC(theta, b, a, first, last)
-}
-
-
-# MLE of theta for one score in one booklet which does not have to be an integer
-# b must be a vector or a matrix with the draws as columns
-ML_theta = function(score,b,a,first,last)
-{
-  if(!is.matrix(b)) b = matrix(b,ncol=1)
-  ML_theta_c(as.numeric(score), b, as.integer(a), as.integer(first-1L), as.integer(last-1L))
-}
 
 
 

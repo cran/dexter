@@ -9,8 +9,8 @@ deriv_theta_c <- function(theta, b, a, first, last, n_cores = 1L) {
     .Call(`_dexter_deriv_theta_c`, theta, b, a, first, last, n_cores)
 }
 
-theta_wmle_c <- function(b, a, first, last, bk_nit, WLE, n_cores = 1L) {
-    .Call(`_dexter_theta_wmle_c`, b, a, first, last, bk_nit, WLE, n_cores)
+theta_wmle_c <- function(b, a, first, last, bk_nit, WLE, theta_combined = TRUE, n_cores = 1L) {
+    .Call(`_dexter_theta_wmle_c`, b, a, first, last, bk_nit, WLE, theta_combined, n_cores)
 }
 
 theta_jeap_c <- function(grid, b, a, first, last, bk_nit, n_cores = 1L) {
@@ -157,6 +157,14 @@ omp_ncores <- function() {
     .Call(`_dexter_omp_ncores`)
 }
 
+PV_sve <- function(b, a, bk_first, bk_last, bcni, booklet_id, booklet_score, mu, sigma, max_cores, pv_mat, missing_data, pv_col_indx = 0L, niter = 1L) {
+    invisible(.Call(`_dexter_PV_sve`, b, a, bk_first, bk_last, bcni, booklet_id, booklet_score, mu, sigma, max_cores, pv_mat, missing_data, pv_col_indx, niter))
+}
+
+pv_metro <- function(lg, booklet_maxscore, booklet_id, booklet_score, prior_mu, prior_sigma, pv_res, max_cores, n_updates = 10L) {
+    invisible(.Call(`_dexter_pv_metro`, lg, booklet_maxscore, booklet_id, booklet_score, prior_mu, prior_sigma, pv_res, max_cores, n_updates))
+}
+
 pv_chain_normal <- function(bmat, a, A, first, last, bk_cnit, bk_max_a, const_scoretab, scoretab_bk, scoretab_pop, scoretab_nscores, scoretab_np, mu_start, sigma_start, npv, progress_init, max_cores, warmup = 10L, step = 1L) {
     .Call(`_dexter_pv_chain_normal`, bmat, a, A, first, last, bk_cnit, bk_max_a, const_scoretab, scoretab_bk, scoretab_pop, scoretab_nscores, scoretab_np, mu_start, sigma_start, npv, progress_init, max_cores, warmup, step)
 }
@@ -165,16 +173,12 @@ pv_chain_mix <- function(bmat, a, A, first, last, bk_cnit, bk_max_a, gscoretab, 
     .Call(`_dexter_pv_chain_mix`, bmat, a, A, first, last, bk_cnit, bk_max_a, gscoretab, gscoretab_bk, gscoretab_nscores, gscoretab_np, mu_start, sigma_start, p_start, npv, progress_init, max_cores, warmup, step)
 }
 
-PV_sve_C <- function(b, a, bk_first, bk_last, bcni, booklet_id, booklet_score, mu, sigma, max_cores, pv_mat, missing_data, pv_col_indx = 0L, niter = 1L) {
-    invisible(.Call(`_dexter_PV_sve_C`, b, a, bk_first, bk_last, bcni, booklet_id, booklet_score, mu, sigma, max_cores, pv_mat, missing_data, pv_col_indx, niter))
+impute_NRM_C <- function(pv, b, a, first, last, person_index, item_first, item_score, by_item, max_cores) {
+    .Call(`_dexter_impute_NRM_C`, pv, b, a, first, last, person_index, item_first, item_score, by_item, max_cores)
 }
 
-sampleNRM_testC <- function(theta, b, a, first, last) {
-    .Call(`_dexter_sampleNRM_testC`, theta, b, a, first, last)
-}
-
-sampleNRM_itemC <- function(theta, b, a, first, last) {
-    .Call(`_dexter_sampleNRM_itemC`, theta, b, a, first, last)
+sample_NRM_C <- function(theta, b, a, first, last, by_item, max_cores) {
+    .Call(`_dexter_sample_NRM_C`, theta, b, a, first, last, by_item, max_cores)
 }
 
 sampleIMC <- function(bIM, cIM, a, first, last, scoretab) {

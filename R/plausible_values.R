@@ -9,19 +9,13 @@ pv_gibbs_settings = function(nPV,
 {
   prior_dist = match.arg(prior_dist)
 
-  if(prior_dist == 'mixture')
-  {
-    warm_up = coalesce(warm_up, 150L)
-  } else
-  {
-    warm_up = coalesce(warm_up, if.else(parms_sample, 20L, 11L))
-  }
+  warm_up = coalesce(warm_up, if.else(prior_dist == 'mixture', 150L, 11L))
   
   step = coalesce(step, if.else(parms_sample, 5L, 1L)) 
   
-  ncores = get_ncores(desired = min(32,nPV), maintain_free = 1L)
-  
   # at least 2 chains, regardless of available cores, sorry mac users
+  # chain per core, max 32
+  ncores = get_ncores(desired = min(32,nPV), maintain_free = 1L)
   nchains = as.integer(max(min(nPV,2L), ncores))
   
   min_b_samples = 1L
@@ -72,15 +66,13 @@ pv_chain = function(x, design, b, a, nPV,
                      A=a, prior_dist = c("normal", "mixture"))
 {
   prior_dist = match.arg(prior_dist)
-  parms_sample = !(is.null(dim(b)) || nrow(b)==1)
+  parms_sample = !(is.null(dim(b)) || ncol(b)==1)
 
   pb = get_prog_bar()
   on.exit({pb$close()})
 
   if(parms_sample)
   {
-    b = t(b)
-
     if(gibbs_settings$min_b_samples > ncol(b)) 
     {
       message(sprintf('For optimal sampling from the posterior with nPV=%i and prior_dist="%s" you should use at least %i draws in `fit-enorm`',
@@ -126,8 +118,8 @@ pv_chain = function(x, design, b, a, nPV,
     npop = max(scoretab_counts$pop_c) + 1L
     
     start_mu = matrix(rnorm(npop*gibbs_settings$nchains), ncol=gibbs_settings$nchains)
-    start_sigma = runif(gibbs_settings$nchains,3,4)
-    
+    start_sigma = runif(gibbs_settings$nchains,2,3) 
+
     res = pv_chain_normal(bmat = b, a = a, A = A, 
                           first = design$first_c, last = design$last_c, bk_cnit = design$bk_cnit, bk_max_a = design$bk_max_a,
                           const_scoretab = scoretab, scoretab_bk = scoretab_counts$booklet_c, scoretab_pop = scoretab_counts$pop_c,
@@ -135,8 +127,9 @@ pv_chain = function(x, design, b, a, nPV,
                           mu_start = start_mu, sigma_start = start_sigma, npv = as.integer(nPV), 
                           progress_init = pb$cpp_prog_init(), max_cores = gibbs_settings$ncores,
                           warmup = gibbs_settings$warm_up,  step = gibbs_settings$step)
-    
-    #dimnames(res$prior_log) = list(var=c('mu','sigma','tau', sprintf("theta_%i",1:(nrow(res$prior_log)-3))),iter=NULL,chain=NULL)
+    #cat('\n')
+    #print(res$n_alt)
+    dimnames(res$prior_log) = list(var=c('mu','sigma','tau', sprintf("theta_%i",1:(nrow(res$prior_log)-3))),iter=NULL,chain=NULL)
   } else
   {
     start_p = runif(gibbs_settings$nchains, .4, .6)
@@ -151,23 +144,17 @@ pv_chain = function(x, design, b, a, nPV,
                        progress_init = pb$cpp_prog_init(), max_cores = gibbs_settings$ncores,
                        warmup = gibbs_settings$warm_up,  step = gibbs_settings$step)
     
-    #dimnames(res$prior_log) = list(var=c('p','mu_1','mu_2','sigma_1','sigma_2'),iter=NULL,chain=NULL)
+    dimnames(res$prior_log) = list(var=c('p','mu_1','mu_2','sigma_1','sigma_2'),iter=NULL,chain=NULL)
   }
   # for testing only  
   #assign("prior_log", res$prior_log, envir = .GlobalEnv)
   
   colnames(res$theta) = sprintf("PV%i",1:ncol(res$theta))
   
-  bind_cols(bind_rows(x), res$theta)
+  list(pv = bind_cols(bind_rows(x), res$theta) |>  select(-any_of('pop')), 
+       b_index=res$b_index)
 }
 
-# missing_data as optional argument
-PV_sve = function(b, a, bk_first, bk_last, bcni, booklet_id, booklet_score, mu, sigma, max_cores, pv_mat, 
-  missing_data=NULL, pv_col_indx = 0L, niter = 1L) 
-{
-  if(is.null(missing_data)) missing_data = 0L
-  PV_sve_C(b, a, bk_first, bk_last, bcni, booklet_id, booklet_score, mu, sigma, max_cores, pv_mat, missing_data, pv_col_indx, niter)
-}
 
 
 # user interface ----------------------------------------------------------
@@ -180,7 +167,7 @@ PV_sve = function(b, a, bk_first, bk_last, bcni, booklet_id, booklet_score, mu, 
 #'
 #' @param dataSrc a connection to a dexter database, a matrix, or a data.frame with columns: person_id, item_id, item_score
 #' @param parms An object returned by function \code{fit_enorm} containing parameter estimates or a data.frame with columns item_id, item_score and, 
-#' beta. If parms are provided, item parameters are considered known. If parms is NULL, they will be estimated Bayesianly.
+#' beta. If parms are provided, item parameters are considered known, see @details. If parms is NULL, they will be estimated Bayesianly.
 #' @param predicate an expression to filter data. If missing, the function will use 
 #' all data in dataSrc
 #' @param covariates name or a vector of names of the variables to group the populations used to improve the prior.
@@ -190,6 +177,8 @@ PV_sve = function(b, a, bk_first, bk_last, bcni, booklet_id, booklet_score, mu, 
 #' @param parms_draw when the item parameters are estimated with method "Bayes" (see: \code{\link{fit_enorm}}), 
 #' parms_draw specifies whether to use a sample (a different item parameter draw for each plausible values draw) or the posterior mean
 #' of the item draws. Alternatively, it can be an integer specifying a specific draw. It is ignored when parms is not estimated Bayesianly.
+#' @param link_error only for cml, whether to use the maximum likelihood estimates or random draws based on the covariance matrix, 
+#' thus including estimation/linking error in the pv draws.
 #' @param prior_dist use a normal prior for the plausible values or a mixture of two normals. 
 #' A mixture is only possible when there are no covariates.
 #' @param merge_within_persons If a person took multiple booklets, this indicates
@@ -199,8 +188,9 @@ PV_sve = function(b, a, bk_first, bk_last, bcni, booklet_id, booklet_score, mu, 
 #' 
 #' @details
 #' 
-#' When the item parameters are estimated using \code{fit_enorm(..., method='Bayes')} and parms_draw = 'sample', the uncertainty 
-#' of the item parameters estimates is taken into account when drawing multiple plausible values. 
+#' When the item parameters are estimated using \code{fit_enorm(..., method='Bayes')} and parms_draw = 'sample', 
+#' or when they are estimated with CML and \code{lin_error=TRUE} the uncertainty 
+#' of the item parameter estimates is taken into account when drawing multiple plausible values. To use these options, parms must be an object of type enorm and not a data.frame.
 #' 
 #' In there are covariates, the prior distribution is a hierarchical normal with equal variances across groups. When there is only
 #' one group this becomes a regular normal distribution. When there are no covariates and prior_dist = "mixture", the prior is a mixture
@@ -247,27 +237,30 @@ PV_sve = function(b, a, bk_first, bk_last, bcni, booklet_id, booklet_score, mu, 
 #' 
 plausible_values = function(dataSrc, parms=NULL, predicate=NULL, covariates=NULL, 
                              nPV=1, 
-                             parms_draw = c('sample','average'), 
+                             parms_draw = c('sample','average'),
+                             link_error = FALSE,
                              prior_dist = c("normal", "mixture"),
                              merge_within_persons = FALSE)
 {
   qtpredicate = eval(substitute(quote(predicate)))
   env = caller_env()
   prior_dist = match.arg(prior_dist)
+
   check_dataSrc(dataSrc)
   check_num(nPV, .length=1, .min=1)
   
   df_info = get_datatype_info(dataSrc, columns = c('booklet_id','person_id',covariates))
   
   plausible_values_(dataSrc, parms, qtpredicate=qtpredicate, covariates=covariates, nPV=nPV, 
-                     parms_draw = parms_draw, env=env,prior_dist = prior_dist ,
+                     parms_draw=parms_draw, link_error = link_error, env=env,prior_dist = prior_dist ,
                      merge_within_persons=merge_within_persons)$pv |>
     df_format(df_info)
 }
 
 
 plausible_values_ = function(dataSrc, parms=NULL, qtpredicate=NULL, covariates=NULL, 
-                              nPV=1, parms_draw = c('sample','average'), 
+                              nPV=1, parms_draw = c('sample','average'),
+                              link_error = FALSE,
                               env=NULL, prior_dist = c("normal", "mixture"),
                               merge_within_persons = FALSE)
 {
@@ -276,6 +269,7 @@ plausible_values_ = function(dataSrc, parms=NULL, qtpredicate=NULL, covariates=N
   if(is.numeric(parms_draw)) parms_draw = as.integer(parms_draw)
   else parms_draw = match.arg(parms_draw)
   
+
   prior_dist = match.arg(prior_dist)
   
   if(!is.null(covariates) && prior_dist == "mixture")
@@ -283,12 +277,18 @@ plausible_values_ = function(dataSrc, parms=NULL, qtpredicate=NULL, covariates=N
     message('A mixture prior cannot be used together with covariates, setting `prior_dist = "normal"`')
     prior_dist = 'normal'
   }
+  if(inherits(parms,'data.frame') && link_error)
+  {
+    message('link_error cannot be used with a data.frame of parameters, setting `link_error = FALSE`')
+  }
   
 
-  pb = get_prog_bar(nsteps=if(is.null(parms)) 120 else 100, 
+  pb = get_prog_bar(nsteps=if(is.null(parms) || link_error) 120 else 100, 
                     retrieve_data = is_db(dataSrc))
   on.exit({pb$close()})
   
+
+  cml_n_draws = 1
   if(is.null(parms)) 
   {
     nrm_draws = 1000L
@@ -299,10 +299,10 @@ plausible_values_ = function(dataSrc, parms=NULL, qtpredicate=NULL, covariates=N
                              merge_within_persons=merge_within_persons)
     pb$new_area(20)
     parms = fit_enorm_(respData, method = 'Bayes', nDraws = nrm_draws) 
+    pb$new_area(100)
     
     respData = get_resp_data(respData, summarised=TRUE, extra_columns=covariates, 
                              protect_x=!is_db(dataSrc))
-    pb$new_area(100)
     
   } else
   {
@@ -312,6 +312,8 @@ plausible_values_ = function(dataSrc, parms=NULL, qtpredicate=NULL, covariates=N
     } else
     {
       pcheck = parms$inputs$ssIS[,c('item_id','item_score')]
+      if(link_error)
+        cml_n_draws = pv_gibbs_settings(nPV, parms_sample=TRUE, prior_dist = prior_dist)$min_b_samples
     }
     
     respData = get_resp_data(dataSrc, qtpredicate, summarised=TRUE, 
@@ -319,13 +321,13 @@ plausible_values_ = function(dataSrc, parms=NULL, qtpredicate=NULL, covariates=N
                              parms_check=pcheck,
                              merge_within_persons=merge_within_persons)
   }
-  
-  parms = simplify_parms(parms, draw=parms_draw)
+ 
+  parms = simplify_parms(parms, draw=parms_draw, cml_draws = cml_n_draws)
+
   
   gibbs_settings = pv_gibbs_settings(nPV, 
-                                     parms_sample = !(is.null(dim(parms$b)) || nrow(parms$b)==1), 
+                                     parms_sample = !(is.null(dim(parms$b)) || ncol(parms$b)==1), 
                                      prior_dist = prior_dist)
-  
   
   if(!is.null(covariates))
   {
@@ -354,19 +356,18 @@ plausible_values_ = function(dataSrc, parms=NULL, qtpredicate=NULL, covariates=N
                               inner_join(parms$items, by='item_id') |> 
                               arrange(.data$booklet_id, .data$first))
   
-  
-  y = pv_chain(select(respData$x, 'booklet_id', 'person_id', 'booklet_score', any_of(c(pop = 'pop__'))),
+  res = pv_chain(select(respData$x, 'booklet_id', 'person_id', 'booklet_score', any_of(c(pop = 'pop__'))),
                design, parms$b, parms$a, nPV=nPV, prior_dist=prior_dist,
-               gibbs_settings=gibbs_settings) |>
-    select(-any_of('pop'))
-  
-  
+               gibbs_settings=gibbs_settings)
+   
   if(!is.null(covariates))
   {
     # added unique so that booklet_id can be used as a covariate
-    y = inner_join(respData$x[,unique(c('booklet_id','person_id',covariates))], y, 
+    res$pv = inner_join(respData$x[,unique(c('booklet_id','person_id',covariates))], res$pv, 
                    by=c('booklet_id','person_id') )
   }
-
-  list(pv=y,parms=parms)
+  if(!all(res$b_index==1))
+    parms$b = parms$b[,res$b_index]
+  
+  list(pv=res$pv, parms=parms)
 }

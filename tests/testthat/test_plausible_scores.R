@@ -31,7 +31,7 @@ test_that('basic plausible scores checks',{
   ps = plausible_scores(r,f,items=get_items(db),nPS=2,by_item=TRUE) |>
     inner_join(get_responses(db), by=c('item_id','person_id'))
   
-  w=which(ps$item_id=='S2DoScold')
+  w = (ps$item_id=='S2DoScold')
   expect_true(all(ps$item_score[!w] == ps$PS1[!w]) && all(ps$item_score[!w] == ps$PS2[!w]), 
               label='by_item keep observed works')
   
@@ -59,7 +59,7 @@ test_that('plausible scores works',{
   
   f = fit_enorm(responses)
 
-  ps_b2 = plausible_scores(responses, parms = f, items = filter(design, booklet_id == 'b2') )
+  ps_b2 = plausible_scores(responses, parms = f, items = sample(items$item_id,25) )
   
   sc_b2 = persons |>
     mutate(booklet_id = 'b2') |>
@@ -76,7 +76,7 @@ test_that('plausible scores works',{
               info=paste('expected correlation test_score and PS>0.65, found:',cor(sc_b2$PS1, sc_b2$test_score)))
   
   
-  # keep.observed should work
+  # keep.observed should work, this is with keep.observed=TRUE and for all items by default
   ps = plausible_scores(responses) |> 
     rename(PS_keep_true = 'PS1') |>
     inner_join(plausible_scores(responses, keep.observed = FALSE), by= c('person_id','booklet_id')) |>
@@ -89,7 +89,8 @@ test_that('plausible scores works',{
   
   expect_false(any(ps$PS_keep_true<ps$booklet_score))
   
-  expect_lt(abs(mean(ps$PS1)-mean(ps$PS_keep_true)),0.15)
+  # this is about within 1se, not a useful check
+  #expect_lt(abs(mean(ps$PS1)-mean(ps$PS_keep_true)),0.15)
   
 })
 

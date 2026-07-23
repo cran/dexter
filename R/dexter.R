@@ -1,34 +1,6 @@
 utils::globalVariables(".")
 
 
-
-
-#' Dexter: data analyses for educational and psychological tests.
-#' 
-#' Dexter provides a comprehensive solution for managing and analyzing educational test data.
-#' 
-#' The main features are:
-#' 
-#' \itemize{
-#' \item project databases providing a structure for storing data about persons, items, responses and booklets.
-#' \item methods to assess data quality using Classical test theory and plots.
-#' \item CML calibration of the extended nominal response model and interaction model.
-#' }
-#' 
-#' To learn more about dexter, start with the vignettes: `browseVignettes(package="dexter")`  
-#' 
-#' Dexter uses the following global options
-#' \itemize{
-#' \item `dexter.use_tibble` return tibbles instead of data.frames, defaults to FALSE
-#' \item `dexter.progress` show progress bars, defaults to TRUE in interactive sessions
-#' \item `dexter.max_cores` set a maximum number of cores that dexter will use, defaults to the minimum of `Sys.getenv("OMP_THREAD_LIMIT")` and
-#' `getOption("Ncpus")`, otherwise unlimited.
-#' }
-#' 
-"_PACKAGE"
-
-
-
 #' Start a new project
 #'
 #' Imports a complete set of scoring rules and starts a new project (database)
@@ -46,8 +18,9 @@ utils::globalVariables(".")
 #' Values are used as default (missing) values. The datatype will also be inferred from the values.
 #' Known person_properties will be automatically imported when adding response data with \code{\link{add_booklet}}. 
 #' @return a database connection object.
-#' @details This package only works with closed items (e.g. likert, MC or possibly short answer)
-#' it does not score any open items.
+#' @details 
+#' 
+#'  
 #' The first step to creating a project is to import an exhaustive list of all items and
 #' all admissible responses, along with the score that any of the latter will be given.
 #' Responses may be integers or strings but they will always be treated as strings.
@@ -55,6 +28,9 @@ utils::globalVariables(".")
 #' When inputting data, all responses not specified in the rules can optionally be treated as
 #' missing and ultimately scored 0, but it is good style to include the missing
 #' responses in the list. NA values will be treated as the string "NA"'.
+#' 
+#' The Scoring rules are primarily useful for multiple choice or short open items.
+#' For essay items and the like it is usually best to make the response equal to the score.
 #'
 #' @examples
 #'\donttest{
@@ -70,7 +46,12 @@ start_new_project = function(rules, db_name="dexter.db", person_properties = NUL
   check_list(person_properties, nullable=TRUE)
   
   if(!is.null(person_properties))
-      dbCheck_reserved_colnames(names(person_properties))
+  {
+    if(length(names(person_properties)) ==0 || anyDuplicated(tolower(names(person_properties))))
+      stop_("Person properties must be uniquely named (case is ignored)")
+    names(person_properties) = tolower(names(person_properties))
+  }
+      
 
   rules = rules[, c("item_id", "response", "item_score")]
   rules$response = as.character(rules$response)
@@ -78,12 +59,15 @@ start_new_project = function(rules, db_name="dexter.db", person_properties = NUL
   rules$item_id = as.character(rules$item_id)
 
   if(any(as.numeric(rules$item_score) %% 1 != 0))
-    stop('only integer scores are allowed')
+    stop_('only integer scores are allowed')
   
   rules$item_score = as.integer(rules$item_score)
   
+  if(any( rules$item_score < 0))
+    stop_('item_score must be >= 0 ')
+  
   if(any(is.na(rules$item_id)) || any(is.na(rules$item_score)))
-    stop("The item_id and item_score columns may not contain NA values")
+    stop_("The item_id and item_score columns may not contain NA values")
   
   if(NROW(rules)>0)
   {
@@ -96,9 +80,9 @@ start_new_project = function(rules, db_name="dexter.db", person_properties = NUL
 
     if (nrow(sanity)>0)
   	{
-        message("There were problems with your scoring rules.\nCheck the output below for possible reasons.\n")
+        cl_msg("There were problems with your scoring rules.\nCheck the output below for possible reasons.",mod='message')
         print(as.data.frame(sanity))
-        stop('Scoring rules are not valid')
+        stop_('Scoring rules are not valid')
   	}
   } 
 
@@ -106,12 +90,12 @@ start_new_project = function(rules, db_name="dexter.db", person_properties = NUL
   {
       check_string(db_name)
       if (file.exists(db_name) && !suppressWarnings({file.remove(db_name)}))
-        stop('Could not overwrite file: ', db_name)
+        stop_('Could not overwrite file: ', db_name)
       
       db = dbConnect(SQLite(), db_name)
   } else if(!is_db(db_name))
   {
-      stop('argument db_name must be a filename or a DBIconnection')
+      stop_('argument db_name must be a filename or a DBIconnection')
   }
   dbTransaction(db,
   {
@@ -143,13 +127,13 @@ open_project = function(db_name="dexter.db")
 {
   check_string(db_name)
   if (!file.exists(db_name)) 
-    stop("There is no such file")
+    stop_("There is no such file")
     
   db = dbConnect(SQLite(), db_name)
   if(!dbExistsTable(db,'dxitems'))
   {
     dbDisconnect(db)
-    stop('Sorry, this does not appear to be a Dexter database.')
+    stop_('Sorry, this does not appear to be a Dexter database.')
   }
   dbExecute(db,'pragma foreign_keys=1;')
   return(db)
@@ -206,11 +190,11 @@ keys_to_rules = function(keys, include_NA_rule = FALSE)
       ABC=TRUE
       lwr=TRUE
       keys$key = toupper(keys$key)
-    } else stop("You have inadmissible keys")
+    } else stop_("You have inadmissible keys")
   }
   if (ABC) {
     m = match(keys$key, LETTERS)
-    if (any(m>keys$noptions)) stop("You have out-of-range keys")
+    if (any(m>keys$noptions)) stop_("You have out-of-range keys")
     r = keys |> 
       group_by(.data$item_id) |> 
       do({
@@ -219,7 +203,7 @@ keys_to_rules = function(keys, include_NA_rule = FALSE)
         y
       })
   } else {
-    if (any(keys$key>keys$noptions)) stop("You have out-of-range keys")
+    if (any(keys$key>keys$noptions)) stop_("You have out-of-range keys")
     r = keys |> 
       group_by(.data$item_id) |> 
       do({
@@ -276,7 +260,7 @@ touch_rules = function(db, rules)
   check_db(db)
   
   if(any(is.na(rules$item_id)) || any(is.na(rules$item_score)))
-    stop("The item_id and item_score columns may not contain NA values")
+    stop_("The item_id and item_score columns may not contain NA values")
   
   rules = rules[, c("item_id", "response", "item_score")]
   rules$response = as.character(rules$response)
@@ -284,9 +268,12 @@ touch_rules = function(db, rules)
   rules$item_id = as.character(rules$item_id)
   
   if(any(rules$item_score %% 1 != 0))
-    stop('only integer scores are allowed')
+    stop_('only integer scores are allowed')
   
   rules$item_score = as.integer(rules$item_score)
+  
+  if(any( rules$item_score < 0))
+    stop_('item_score must be >= 0 ')
   
   # check if same options are supplied multiple times, this is the only check not done in conjunction
   # with the existing rules so it has to be gotten out of the way
@@ -322,9 +309,9 @@ touch_rules = function(db, rules)
   
   
   if (nrow(sanity)) {
-    message("There were problems with your scoring rules.\nCheck the output below for possible reasons.\n")
+    cl_msg("There were problems with your scoring rules.\nCheck the output below for possible reasons.",mod='message')
     print(as.data.frame(sanity))
-    stop('Scoring rules are not valid')
+    stop_('Scoring rules are not valid')
   }    
   
   dbTransaction(db,
@@ -346,7 +333,7 @@ touch_rules = function(db, rules)
                 select(amended_rules, 'item_id', 'response', 'item_score'))
     }
   })
-  cat(paste0('\nrules_changed: ', nrow(amended_rules), '\nrules_added: ', nrow(new_rules)),'\n')
+  cl_msg(paste0('rules_changed: ', nrow(amended_rules), '\n rules_added: ', nrow(new_rules)))
 }
 
 
@@ -424,7 +411,7 @@ add_booklet = function(db, x, booklet_id, auto_add_unknown_rules = FALSE) {
     mutate(item_position = dense_rank(.data$col_order)) |>
     select(-'col_order')
 
-  if(nrow(design) == 0) stop('None of the column names in x correspond to known items in your project')
+  if(nrow(design) == 0) stop_('None of the column names in x correspond to known items in your project')
 
   dbTransaction(db,{
     out = list()
@@ -455,7 +442,7 @@ add_booklet = function(db, x, booklet_id, auto_add_unknown_rules = FALSE) {
     {
       x$person_id = dbUniquePersonIds(db,nrow(x))
       new_people = x$person_id
-      message("no column `person_id` provided, automatically generating unique person id's")
+      cl_msg("no column `person_id` provided, automatically generating unique person id's")
     } else
     {
       x$person_id = as.character(x$person_id)
@@ -498,7 +485,7 @@ add_booklet = function(db, x, booklet_id, auto_add_unknown_rules = FALSE) {
       out$zero_rules_added = new_rules
     } else if(nrow(new_rules)>0) 
     {
-      message('The following responses are not in your rules (showing first 30):\n')
+      cl_msg('The following responses are not in your rules (showing first 30):\n',mod='message')
       print(head(as.data.frame(new_rules), 30), row.names=FALSE)
       stop_('unknown responses')
     }
@@ -548,7 +535,7 @@ add_response_data = function(db, data, design=NULL, missing_value = 'NA', auto_a
     new_bk = setdiff(data$booklet_id, db_booklets)
     if(length(new_bk) > 0)
     {
-      message('Unknown booklets:')
+      cl_msg('Unknown booklets:',mod='message')
       print(new_bk)
       stop_('`data` contains unknown booklets. You have to specify any new booklets via the design argument.')
     }
@@ -578,7 +565,7 @@ add_response_data = function(db, data, design=NULL, missing_value = 'NA', auto_a
     unknown_items = setdiff(design$item_id,dbGetQuery(db,'SELECT item_id FROM dxitems;')[,1])
     if(length(unknown_items)>0)
     {
-      message('Unknown items:')
+      cl_msg('Unknown items:',mod='message')
       print(unknown_items)
       stop_('`design` contains unknown items. You have to specify any new items and scoring rules using the function touch_rules.')
     }
@@ -630,7 +617,7 @@ add_response_data = function(db, data, design=NULL, missing_value = 'NA', auto_a
     invalid_bk_item = anti_join(data_design, design, by=c('booklet_id','item_id'))
     if(NROW(invalid_bk_item) > 0)
     {
-      message('Unknown booklet, item combinations (showing first 10)')
+      cl_msg('Unknown booklet, item combinations (showing first 10)',mod='message')
       print(head(invalid_bk_item,10))
       stop_('Your data contains booklet,item combinations that should not occur according to the design.')
     }
@@ -660,9 +647,9 @@ add_response_data = function(db, data, design=NULL, missing_value = 'NA', auto_a
       
       if(NROW(unknown_items) > 0)
       {
-        message('The following items are not known in your project:')
+        cl_msg('The following items are not known in your project:',mod='message')
         print(unknown_items$item_id) 
-        stop("encountered item_id's not defined in your project")
+        stop_("encountered item_id's not defined in your project")
       }
       
       if(auto_add_unknown_rules)
@@ -673,11 +660,12 @@ add_response_data = function(db, data, design=NULL, missing_value = 'NA', auto_a
       {
         if(all(new_rules$response == missing_value))
         {
-          message(sprintf('%i missing responses replaced by "%s", but this value is not known in the scoring rules.\nType ?add_response_data for help.',
-                          NA_cnt, missing_value))
+          cl_msg(sprintf('%i missing responses replaced by "%s", but this value is not known in the scoring rules.\nSee %%s for help.',
+                          NA_cnt, missing_value), 'add_response_data', mod='message')
+          
         } else
         {
-          message('Unknown responses (showing first 10):')
+          cl_msg('Unknown responses (showing first 10):',mod='message')
           print(head(new_rules,10))
         }
         stop_("Unknown responses")
@@ -702,7 +690,7 @@ add_response_data = function(db, data, design=NULL, missing_value = 'NA', auto_a
       head(existing_admin, 20) |> 
         as.data.frame() |> 
         print(row.names=FALSE)
-      stop('double administrations')
+      stop_('double administrations')
     }
     
     dbExecute_param(db, 'INSERT INTO dxadministrations(person_id, booklet_id) VALUES(:person_id, :booklet_id);', 
@@ -714,7 +702,7 @@ add_response_data = function(db, data, design=NULL, missing_value = 'NA', auto_a
                         data)
   })
   msg = c(msg,paste(n,'responses imported.\n'))
-  cat(paste(msg,collapse='\n'))
+  cl_msg(paste(msg,collapse='\n'))
 }
 
 
@@ -729,7 +717,7 @@ add_response_data = function(db, data, design=NULL, missing_value = 'NA', auto_a
 #' @param item_properties A data frame containing a column item_id (matching item_id's already defined in the project)
 #'  and 1 or more other columns with item properties (e.g. item_type, subject)
 #' @param default_values a list where the names are item_properties and the values are defaults.
-#' The defaults will be used wherever the item property is unknown.
+#' The defaults will be used whenever the item property is unknown.
 #' @return nothing
 #' @details When entering response data in the form of a rectangular person x item
 #' table, it is easy to provide person properties but practically impossible
@@ -757,68 +745,8 @@ add_item_properties = function(db, item_properties=NULL, default_values=NULL) {
   check_df(item_properties, 'item_id', nullable=TRUE)
   check_list(default_values, nullable=TRUE)
   
-  # for convenience we include the item_id as a property
-  existing_item_properties = dbListFields(db, 'dxitems') 
-  
-  dbTransaction(db, 
-  {
-    if(!is.null(default_values))
-    {
-      names(default_values) = dbValid_colnames(names(default_values))
-      
-      new_prop_names = setdiff(names(default_values), existing_item_properties)
-      dbCheck_existing_colnames(db,new_prop_names)
-      
-      for(prop_name in new_prop_names)
-      {
-        dbExecute(db, 
-                  paste0("ALTER TABLE dxitems ADD COLUMN ",
-                         prop_name, 
-                         sql_col_def(default_values[[prop_name]], TRUE, db),';'))
-      }
-      cat(paste(length(new_prop_names),'new item_properties defined\n'))
-      existing_item_properties = c(existing_item_properties, new_prop_names)
-    }
-    if(!is.null(item_properties))
-    {
-      colnames(item_properties) = dbValid_colnames(colnames(item_properties))
-      
-      item_properties = item_properties |>
-        mutate(item_id = as.character(.data$item_id)) |>
-        mutate_if(is.factor, as.character) 
-      
-      if(inherits(db,'SQLiteConnection'))
-      {
-        item_properties = item_properties |>
-          mutate_if(is.date, format, "%Y-%m-%d") |>
-          mutate_if(is.time, format, "%Y-%m-%d %H:%M:%S")
-      }
-
-      if(!('item_id' %in% colnames(item_properties)))
-        stop('item_properties needs to have a column item_id')
-      
-      new_prop_names = setdiff(colnames(item_properties), existing_item_properties)
-      dbCheck_existing_colnames(db,new_prop_names)
-      
-      for(prop_name in new_prop_names)
-      {
-        dbExecute(db, 
-                paste0("ALTER TABLE dxitems ADD COLUMN ", 
-                       sql_quote(prop_name,'"'), 
-                       sql_data_type(pull(item_properties, prop_name)),";"))
-      }
-      pnames = names(item_properties)[names(item_properties)!='item_id']
-      
-      n = dbExecute_param(db,
-            paste0('UPDATE dxitems SET ',paste0(sql_quote(pnames,'"'),'=:',pnames,collapse=', '),
-                      ' WHERE item_id=:item_id;'),
-            item_properties)
-      cat(paste(length(pnames), 'item properties for', n, 'items added or updated\n'))
-    }
-  })
+  add_properties(db, item_properties, default_values, 'items')
 }
-
-
 
 #' Add person properties to a project
 #'
@@ -831,7 +759,7 @@ add_item_properties = function(db, item_properties=NULL, default_values=NULL) {
 #' @param person_properties A data frame containing a column person_id and 1 or more other columns with 
 #' person properties (e.g. education_type, birthdate)
 #' @param default_values a list where the names are person_properties and the values are defaults.
-#' The defaults will be used wherever the person property is unknown.
+#' The defaults will be used whenever the person property is unknown.
 #' 
 #' @details
 #' Due to limitations in the sqlite database backend that we use, the default values for a person property 
@@ -844,60 +772,79 @@ add_person_properties = function(db, person_properties = NULL, default_values = 
   check_df(person_properties, 'person_id', nullable=TRUE)
   check_list(default_values, nullable=TRUE)
   
+  add_properties(db, person_properties, default_values, 'persons')
+}
+
+# maybe message if name is lowercased?
+add_properties = function(db, prop, default_values, type=c('items','persons'))
+{
+  type = match.arg(type)
+  type_singular = sub('s$','',type)
+  idcol = sprintf('%s_id',type_singular)
+  
+  tbl = paste0('dx',type)
+  existing_prop = dbListFields(db, tbl) 
+  
   dbTransaction(db, 
-  { 
-    existing_props = dbListFields(db, 'dxpersons')
-    
+  {
     if(!is.null(default_values))
     {
-      names(default_values) = dbValid_colnames(names(default_values))
-      default_values = default_values[!names(default_values ) %in% existing_props] 
+      names(default_values) = tolower(names(default_values))
+      if(length(names(default_values))==0 || anyDuplicated(names(default_values)))
+        stop_("default values must be uniquely named (case is ignored)")
       
-      dbCheck_existing_colnames(db, names(default_values))
-  
-      for(prop_name in names(default_values))
+      new_prop_names = setdiff(names(default_values), existing_prop)
+      dbCheck_existing_colnames(db, new_prop_names)
+      
+      for(prop_name in new_prop_names)
       {
-        dbExecute(db, paste0("ALTER TABLE dxpersons ADD COLUMN ",prop_name, sql_col_def(default_values[[prop_name]], TRUE, db),';'))
+        dbExecute(db,
+          sprintf("ALTER TABLE %s ADD COLUMN %s %s;",tbl, sql_quote(prop_name,'"'),
+                  sql_col_def(default_values[[prop_name]], TRUE, db)))
       }
-      cat(paste(length(setdiff(names(default_values), existing_props)),"new person_properties defined\n"))
-      existing_props = c(existing_props, names(default_values))
+      cl_msg(sprintf('%i new %s_properties defined', length(new_prop_names),type_singular))
+      existing_prop = c(existing_prop, new_prop_names)
     }
-    
-    if(!is.null(person_properties))
+    if(!is.null(prop))
     {
-      person_properties$person_id = as.character(person_properties$person_id)
-      colnames(person_properties) = dbValid_colnames(colnames(person_properties))
-
-      new_props = setdiff(colnames(person_properties), existing_props)
-      dbCheck_existing_colnames(db, new_props)
+      if(anyDuplicated(tolower(colnames(prop))))
+        stop_("Properties must be uniquely named (case is ignored)")
+      
+      colnames(prop) = tolower(colnames(prop))
+      prop[[idcol]] = as.character(prop[[idcol]])
+      prop = mutate_if(prop,is.factor, as.character)
       
       if(inherits(db,'SQLiteConnection'))
       {
-        person_properties = person_properties |>
+        prop = prop |>
           mutate_if(is.date, format, "%Y-%m-%d") |>
           mutate_if(is.time, format, "%Y-%m-%d %H:%M:%S")
       }
+
       
+      new_prop_names = setdiff(colnames(prop), existing_prop)
+      dbCheck_existing_colnames(db,new_prop_names)
       
-      lapply(new_props, function(prop_name)
+      for(prop_name in new_prop_names)
       {
-        dbExecute(db, paste0("ALTER TABLE dxpersons ADD COLUMN ",
-                             sql_quote(prop_name,'"'), 
-                             sql_col_def(pull(person_properties, prop_name), FALSE, db),';'))
-      })
+        dbExecute(db, 
+          sprintf("ALTER TABLE %s ADD COLUMN %s %s ;",
+                  tbl, sql_quote(prop_name,'"'), sql_data_type(prop[[prop_name]])))
+      }
+      pnames = colnames(prop)[colnames(prop) != idcol]
+      safe_names = paste0('zz__',seq_along(pnames))
+      names(pnames) = safe_names
+      prop = rename(prop, all_of(pnames))
       
-      pnm = setdiff(colnames(person_properties),'person_id')
-      
-      n = dbExecute_param(db, 
-                    paste('UPDATE dxpersons SET', paste0(sql_quote(pnm,'"'), '=:', pnm, collapse = ','),
-                              'WHERE person_id=:person_id;'),
-                    person_properties)
-      
-      cat(paste(ncol(person_properties) - 1, 'person properties for', n, 'persons added or updated\n'))
+      n = dbExecute_param(db,
+            sprintf('UPDATE %s SET %s WHERE %s=:%s;', 
+                    tbl,paste0(sql_quote(pnames,'"'),'=:',safe_names,collapse=', '),idcol,idcol),
+            prop)
+
+      cl_msg(paste(length(pnames), type_singular, 'properties for', n, type,'added or updated.\n'))
     }
   })
 }
-
 
 
 
@@ -1091,11 +1038,11 @@ get_design = function(dataSrc,
   if(format == 'wide')
   {
     if(!'item_position' %in% colnames(design))
-      stop('Cannot make wide format becasue item position is missing in input')
+      stop_('Cannot make wide format becasue item position is missing in input')
 
     rows = match.arg(rows)
     columns = match.arg(columns)
-    if(rows == columns) stop('rows may not be equal to columns')
+    if(rows == columns) stop_('rows may not be equal to columns')
     val_col = setdiff(c('booklet_id','item_id','item_position'), c(rows, columns))
 
     design |>
@@ -1182,7 +1129,7 @@ design_info = function(dataSrc, predicate = NULL)
       
     
   if(nrow(out$design) == 0 )
-    stop("design is empty: no data selected")
+    stop_("design is empty: no data selected")
     
  
   #testlets

@@ -120,10 +120,9 @@ theta_function = function(parms, items=NULL, booklet=NULL, parms_draw=c('average
   } else fl = parms$items
   a = parms$a
   b = parms$b
-  multiple_b=is.matrix(b) && nrow(b)>1 && ncol(b)>1
+  multiple_b = is.matrix(b) && nrow(b)>1 && ncol(b)>1
   if(multiple_b)
   {
-    b=t(b)
     n_cores = get_ncores(min(ncol(b),20),1L)
   }  else
   { 
@@ -164,7 +163,7 @@ theta_function = function(parms, items=NULL, booklet=NULL, parms_draw=c('average
       drop(res)
     }
     class(out) = append('exp_func',class(out))
-  } else if(what=='sim')
+  } else if(what == 'sim')
   {
     out = function(theta)
     {
@@ -173,10 +172,10 @@ theta_function = function(parms, items=NULL, booklet=NULL, parms_draw=c('average
         res = array(0,dim=c(length(theta), nrow(fl), ncol(b)))
         colnames(res) = fl$item_id
         for(i in 1:ncol(b))
-          res[,,i] = rscore_item(theta,b=b[,i],a=a,first = fl$first, last = fl$last)
+          res[,,i] = sample_scores(theta=theta,b=b[,i],a=a,first0 = fl$first0, last0 = fl$last0, by_item=TRUE, item_long=FALSE)
       } else
       {
-        res = rscore_item(theta,b=drop(b),a=a,first = fl$first, last = fl$last)
+        res = sample_scores(theta=theta, b=b,a=a,first0 = fl$first0, last0 = fl$last0, by_item=TRUE, item_long=FALSE)
         colnames(res) = fl$item_id
       }
       res
@@ -184,6 +183,12 @@ theta_function = function(parms, items=NULL, booklet=NULL, parms_draw=c('average
     class(out) = append('sim_func',class(out))
   } else if(what=='pmf')
   {
+    # only pre compute this for non Bayesian case
+    lgamma = if(!multiple_b)
+    {
+      log(elsymC(b=drop(b),a=a,first = fl$first-1L, last = fl$last-1L))
+    }
+    
     out = function(theta)
     {
       check_num(theta)
@@ -197,7 +202,7 @@ theta_function = function(parms, items=NULL, booklet=NULL, parms_draw=c('average
           res[,,i] = t(pscore(theta,b=b[,i],a=a,first = fl$first, last = fl$last))
       } else
       {
-        res = t(pscore(theta,b=drop(b),a=a,first = fl$first, last = fl$last))
+        res = t(pscore_lgamma(theta,lgamma))
       }
       res
     }

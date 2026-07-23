@@ -8,7 +8,7 @@
 # the default 'sample' returns the complete matrix, i.e. the sample is the census in the original order
 # any subsequent 'sampling' must be done in the caller function itself
 
-simplify_parms = function(parms, design=NULL, draw = c('sample','average'), by_chain=FALSE)
+simplify_parms = function(parms, design=NULL, draw = c('sample','average'), by_chain=FALSE, cml_draws=-1)
 {
   check_df(design, 'item_id', nullable=TRUE)
   chain_index = NULL
@@ -45,27 +45,52 @@ simplify_parms = function(parms, design=NULL, draw = c('sample','average'), by_c
     parms = coef(parms)
   }
   
+  
   if(inherits(parms,'enorm') || inherits(parms,'prms'))
   {
     method = parms$inputs$method
     a = parms$inputs$ssIS$item_score
+    
+    if(method=='Bayes')
+    {
+      if(!coalesce(parms$est$draw_as_col, FALSE))
+      {
+        # older dexter version (draw_as_col not defined), transpose b
+        parms$est$b = t(parms$est$b)
+      }
+    }
+    
     if(method=="CML"){
-      b = parms$est$b
+      if(cml_draws <= 1)
+      {
+        b = parms$est$b
+      } else
+      {
+        if(is.null(parms$cache$R_beta)) parms$cache$R_beta = get_sigma_decomp(parms$est$acov.beta)
+          
+        beta = t(rmvnorm(cml_draws, mu=parms$est$beta, sigma = parms$est$acov.beta, R = parms$cache$R_beta))
+        dimnames(beta) = list('items'=NULL,'draws'=NULL)
+        # if no fixed parameters, normalize
+        if(!any(diag(parms$est$acov.beta)==0)) beta = apply(beta,'draws',\(x) x - mean(x))
+
+        b = apply(beta,'draws',\(beta) beta2b(a, beta, parms$inputs$ssI$first, parms$inputs$ssI$last))
+      }
+      
     } else if(is.numeric(draw)) 
     {
-      if(draw>nrow(parms$est$b)) 
-        stop_(sprintf('Draw %i is larger than the number of item parameter draws (%i)', draw,nrow(parms$est$b)))
-      b = parms$est$b[draw,]	
+      if(draw > ncol(parms$est$b)) 
+        stop_(sprintf('Draw %i is larger than the number of item parameter draws (%i)', draw,ncol(parms$est$b)))
+      b = parms$est$b[,draw]	
     } else if(draw == 'average')
     {
       if(by_chain)
       {
         s = parms$est$chain_start
-        chain_index = mapply(s,c(s[-1]-1,nrow(b)), FUN=`:`,SIMPLIFY=FALSE)
-        b = do.call(rbind, lapply(chain_index, function(indx) colMeans(b[indx,])))
+        chain_index = mapply(s,c(s[-1]-1,ncol(b)), FUN=`:`,SIMPLIFY=FALSE)
+        b = do.call(rbind, lapply(chain_index, function(indx) rowMeans(b[,indx])))
       } else
       {
-        b = colMeans(parms$est$b)  
+        b = rowMeans(parms$est$b)  
       }
     } else 
     {
@@ -168,7 +193,7 @@ fixed_param2df = function(fixed_params, design)
         message("Posterior means are taken as values for fixed parameters")
       
       fixed_params = fixed_params$inputs$ssIS
-      fixed_params$b = if.else(fixed_params$inputs$method=="CML", fixed_params$est$b, colMeans(fixed_params$est$b))
+      fixed_params$b = if.else(fixed_params$inputs$method=="CML", fixed_params$est$b, rowMeans(fixed_params$est$b))
       
     } else
     {
@@ -188,10 +213,38 @@ fixed_param2df = function(fixed_params, design)
 }
 
 
+check_param = function(parms, nullable=TRUE, name = deparse(substitute(parms)))
+{
+  if(is.null(parms) && nullable) return(NULL)
+  if(inherits(parms,c('prms','enorm'))) return(NULL)
+  if(!inherits(parms,'data.frame')) stop_(paste(name, 'must be an `enorm` object or a data.frame', if.else(nullable, 'or NULL','')))
+  
+  colnames(parms) = tolower(colnames(parms))
+  diff_par = intersect(colnames(parms), c('b','beta','eta','delta'))
+  if(length(diff_par) == 0)
+    stop_('parameters must contain a difficulty parameter beta')
+  
+  check_df(parms, columns=c('item_id','item_score'), name=name)
+  
+  if(any(parms$item_score %% 1 > 0))
+    stop_("column 'item_score' must be integer valued")
+  
+  if(n_distinct(parms$item_id, parms$item_score) < nrow(parms))
+    stop_('multiple parameters supplied for the same item and score')
+  
+  if(any(parms$item_score <= 0))
+    stop_("Items scores of 0 or less are not supported")
+  
+  if(diff_par == 'b' && any(parms[['b']] <= 0))
+    stop("A 'b' parameter cannot be negative, perhaps you meant to include a 'beta' parameter?")
+
+}
+
 
 transform.df.parms = function(parms.df, out.format = c('b','beta','eta'))
 {
   out.format = match.arg(out.format)
+  check_param(parms.df)
   colnames(parms.df) = tolower(colnames(parms.df))
   parms.df = ungroup(parms.df)
   
@@ -199,30 +252,11 @@ transform.df.parms = function(parms.df, out.format = c('b','beta','eta'))
     parms.df = rename(parms.df, beta = 'delta')
   in.format = intersect(colnames(parms.df), c('b','beta','eta'))
   
-  if(length(in.format) == 0)
-    stop('parameters must contain  one of: b, beta, eta')
-  
   if(length(in.format)>1)
   {
     in.format = in.format[1]
     message(paste0("Using '",in.format,"' as input parameter"))
   }
-  
-  if(!all(c('item_id','item_score') %in% colnames(parms.df)))
-    stop('parameters must contain the columns: item_id, item_score')
-  
-  if(any(parms.df$item_score%%1 > 0))
-    stop("column 'item_score' must be integer valued")
-  
-  if(n_distinct(parms.df$item_id, parms.df$item_score) < nrow(parms.df))
-    stop('multiple parameters supplied for the same item and score')
-  
-  
-  if(any(parms.df$item_score <= 0))
-    stop("Items scores of 0 or less are not supported")
-  
-  if(in.format == 'b' && any(parms.df$b <= 0))
-    stop("A 'b' parameter cannot be negative, perhaps you meant to include a 'beta' parameter?")
   
   parms.df$item_id = as.character(parms.df$item_id)
   parms.df$item_score = as.integer(parms.df$item_score)
@@ -316,9 +350,9 @@ makeD = function(a,first,last)
 }
 
 # copied from previous dexter version, just removed the part that removes the 0 cat
-toOPLM = function(a, b, first, last, H=NULL, fixed_b=NULL, lambda=NULL, method=c('CML','Bayes'))
+toOPLM = function(a, b, first, last, H=NULL, fixed_b=NULL, method=c('CML','Bayes'))
 {
-  b_rn = b
+  b_renorm = b
   a_org = a
 
   logb = log(b)
@@ -326,6 +360,73 @@ toOPLM = function(a, b, first, last, H=NULL, fixed_b=NULL, lambda=NULL, method=c
   method=match.arg(method)
 
   ### Bayesian: b is a matrix
+  # 1 column per draw (since 1.8.0, prev. 1 row per draw)
+  if(method=='Bayes')
+  {
+    npar = nrow(b)
+    beta = b
+    for (draw in 1:ncol(b))
+    {
+      for (i in 1:length(first))
+      {
+        beta[first[i], draw] = -logb[first[i], draw]/a[first[i]]
+        if ((last[i]-first[i])>0)
+        {
+          tmp = (logb[(first[i]+1):last[i], draw]-logb[first[i]:(last[i]-1), draw])
+          tmp = tmp/(a[first[i]:(last[i]-1)]-a[(first[i]+1):last[i]])
+          beta[(first[i]+1):last[i], draw] = tmp
+        }
+      }
+      if (is.null(fixed_b))
+      {
+        mean_beta = mean(beta[,draw])
+        b_renorm[,draw] = b_renorm[,draw]*exp(mean_beta*a_org)
+        beta[,draw] = beta[,draw] - mean_beta ## mean center
+      }
+    }
+    if (ncol(beta)>2) cov.beta = cov(t(beta)) 
+  }else if(method=='CML')
+  {                                       ### CML; b is a vector
+    DD = makeD(a,first,last)
+    if (is.null(fixed_b))
+    {
+      beta = DD%*%logb
+      b_renorm = b_renorm*exp(mean(beta)*a_org) # re-normalize b such that it corresponds to beta
+      k  = length(b)
+      CC = matrix(-1/k,k,k)
+      diag(CC)=(k-1)/k
+      beta = CC%*%beta
+      if (!is.null(H))
+      {
+        A  = CC%*%DD
+        cov.beta = solve(H[-1,-1])
+        cov.beta = A[,-1]%*%cov.beta%*%t(A[,-1])
+      }
+    }else # if there are fixed parameters we do not (re-)normalize
+    {
+      beta = DD%*%logb
+      if (!is.null(H))
+      {
+        cov.beta  = solve(H[!fixed_b,!fixed_b])
+        cov.beta  = DD[,!fixed_b]%*%cov.beta%*%t(DD[,!fixed_b]) #this brings the fixed params back
+      }
+    }
+  }  
+  return(list(beta=beta, cov.beta=cov.beta, a=a, b_renorm = b_renorm, first=first, last=last))
+}
+
+
+toOPLM_old = function(a, b, first, last, H=NULL, fixed_b=NULL, lambda=NULL, method=c('CML','Bayes'))
+{
+  b_rn = b
+  a_org = a
+  
+  logb = log(b)
+  cov.beta = NULL
+  method=match.arg(method)
+  
+  ### Bayesian: b is a matrix
+  # 1 column per draw (since 1.8.0, pev. 1 row per draw)
   if(method=='Bayes')
   {
     k=ncol(b)
