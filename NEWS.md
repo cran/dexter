@@ -1,4 +1,4 @@
-# dexter 1.8.0
+# dexter 1.8.1
 
 * plausible_values/plausible_scores has gained an argument link_error, 
   to include estimation/linking error in CML item parameters
